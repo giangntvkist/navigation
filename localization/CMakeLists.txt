@@ -8,12 +8,15 @@ project(localization)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  common_msgs
-  gazebo_ros_pkgs
-  geometry
-  geometry2
-  roscpp
+  geometry_msgs
+  tf
+  tf2
+  roscpp 
   std_msgs
+  nav_msgs 
+  sensor_msgs 
+  gazebo_msgs 
+  gazebo_ros 
 )
 
 ## System dependencies are found with CMake's conventions
@@ -106,9 +109,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES localization
-#  CATKIN_DEPENDS common_msgs gazebo_ros_pkgs geometry geometry2 roscpp std_msgs
+  INCLUDE_DIRS include
+  LIBRARIES localization
+  CATKIN_DEPENDS geometry_msgs tf tf2 roscpp std_msgs nav_msgs sensor_msgs gazebo_msgs gazebo_ros 
 #  DEPENDS system_lib
 )
 
@@ -119,7 +122,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -137,6 +140,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/localization_node.cpp)
+add_executable(amcl src/amcl.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,6 +156,7 @@ include_directories(
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
+target_link_libraries(amcl ${catkin_LIBRARIES})
 
 #############
 ## Install ##
