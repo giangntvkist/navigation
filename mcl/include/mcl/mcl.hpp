@@ -31,73 +31,84 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
 	odom.pose.pose.orientation = msg.pose.pose.orientation;
     _data = true;
 }
-void table_weight() {
+void get_lookuptable() {
     if(_map) {
-        ROS_INFO("Waiting take a table weight...");
-        if(table_lookup) {
+        ROS_INFO("Waiting for get the lookup table...");
+        if(lookup_table) {
             int idx, idy;
+            double w;
+            double a = z_hit/sqrt(2*M_PI*pow(sigma_hit, 2));
+            double b_min = -0.5*pow(dist_max/sigma_hit, 2);
+            double w_min = a*exp(b_min) + z_rand/range_max;
+            double w_max = a + z_rand/range_max;
             int kernel_size = dist_max/occ_map.info.resolution;
             set_weight.clear();
             set_weight.resize(occ_map.data.size());
             for(int i = 0; i < occ_map.data.size(); i++) {
                 cout << "\r";
-                cout << "Loading table lookup: " << int((i+1)*100/occ_map.data.size()) << "% ...";
-                double d_min = dist_max;
-                idy = i/occ_map.info.width;
-                idx = i - idy*occ_map.info.width;
-                if(occ_map.data[idy*occ_map.info.width + idx] != occupied) {
+                cout << "Loading the lookup table: " << int((i+1)*100/occ_map.data.size()) << "% ...";
+                if(occ_map.data[i] != occupied) {
+                    set_weight[i] = std::max(w_min, set_weight[i]);
+                }else {
+                    idy = i/occ_map.info.width;
+                    idx = i - idy*occ_map.info.width;
                     for(int j = idy - kernel_size; j <= idy + kernel_size; j++) {
                         if(j >= 0 && j < occ_map.info.height) {
                             for(int k = idx - kernel_size; k <= idx + kernel_size; k++) {
                                 if(k >= 0 && k < occ_map.info.width) {
-                                    if(occ_map.data[j*occ_map.info.width + k] == occupied) {
+                                    if(occ_map.data[j*occ_map.info.width + k] != occupied) {
                                         double d = occ_map.info.resolution*sqrt(pow(idx - k, 2) + pow(idy - j, 2));
-                                        if(d < d_min) {
-                                            d_min = d;
-                                        }
+                                        double b = -0.5*pow(d/sigma_hit, 2);
+                                        w = a*exp(b) + z_rand/range_max;
+                                    }else {
+                                        w = w_max;
                                     }
+                                    set_weight[j*occ_map.info.width + k] = std::max(w, set_weight[j*occ_map.info.width + k]);
                                 }
                             }
                         }
                     }
-                }else {
-                    d_min = 0.0;
                 }
-                double a = z_hit/sqrt(2*M_PI*pow(sigma_hit, 2));
-                double b = -0.5*pow(d_min/sigma_hit, 2);
-                double q = a*exp(b) + z_rand/range_max;
-                set_weight[i] = q;
             }
-            if(lookup_table_path.length() == 0) {
-                ROS_ERROR("Lookup table path is empty!");
+            ofstream lookup_table_file(lookup_table_path, std::ofstream::out | std::ofstream::trunc);
+            if(lookup_table_file.fail()) {
+                ROS_ERROR("Invalid lookup table link!");
                 error_ = true;
             }else {
-                ofstream table_lookup_file(lookup_table_path, std::ofstream::out | std::ofstream::trunc);
                 for(int i = 0; i < occ_map.info.height; i++) {
                     for(int j = 0; j < occ_map.info.width; j++) {
-                        table_lookup_file << set_weight[i*occ_map.info.width+j] << " ";
+                        lookup_table_file << set_weight[i*occ_map.info.width+j] << " ";
                     }
-                    table_lookup_file << endl;
+                    lookup_table_file << endl;
                 }
-                table_lookup_file.close();
             }
+            lookup_table_file.close();
+            ROS_INFO("Got the lookup table!");
         }else {
-            if(lookup_table_path.length() == 0) {
-                ROS_ERROR("Lookup table path is empty!");
+            ifstream lookup_table_file;
+            lookup_table_file.open(lookup_table_path);
+            set_weight.clear();
+            double w;
+            if(lookup_table_file.fail()) {
+                ROS_ERROR("Invalid lookup table link!");
                 error_ = true;
             }else {
-                ifstream table_lookup_file;
-                table_lookup_file.open(lookup_table_path);
-                set_weight.clear();
-                double w;
-                for(int i = 0; i < occ_map.data.size(); i++) {
-                    table_lookup_file >> w;
-                    set_weight.push_back(w);  
+                while(!lookup_table_file.eof()) {
+                    if(lookup_table_file >> w) {
+                        set_weight.push_back(w);
+                    }else {
+                        break;
+                    }
                 }
-                table_lookup_file.close();
-            }
+                lookup_table_file.close();
+                if(set_weight.size() != occ_map.data.size()) {
+                    ROS_ERROR("Size of lookup table is not equal to size map!");
+                    error_ = true;
+                }else {
+                    ROS_INFO("Got the lookup table!");
+                }
+            }   
         }
-        ROS_INFO("A table weight done!");
         first_time = false;
     }
 }
@@ -132,15 +143,15 @@ void normal_sample() {
 
     double x_0, y_0, theta_0;
     if(!set_init_pose) {
-        if(!last_pose_path.empty()) {
-            ifstream last_pose_file;
-            last_pose_file.open(last_pose_path);
-            last_pose_file >> x_0 >> y_0 >> theta_0;
-            last_pose_file.close();
-        }else {
-            ROS_ERROR("Initial pose path is empty!");
+        ifstream last_pose_file;
+        last_pose_file.open(last_pose_path);
+        if(last_pose_file.fail()) {
+            ROS_ERROR("Invalid last pose link!");
             error_ = true;
+        }else {
+            last_pose_file >> x_0 >> y_0 >> theta_0;
         }
+        last_pose_file.close();
     }else {
         x_0 = init_pose_x;
         y_0 = init_pose_y;
@@ -449,12 +460,13 @@ geometry_msgs::PoseWithCovarianceStamped MeanAndCovariance() {
     q.pose.covariance[35] = mean_theta;
     if(save_last_pose) {
         ofstream last_pose_file;
-        if(!last_pose_path.empty()) {
-            last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
+        last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
+        if(last_pose_file.fail()) {
+            ROS_ERROR("Invalid last pose link!");
+            error_ = true;
         }else {
-            ROS_ERROR("Last pose path is empty!");
+            last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
         }
-        last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
         last_pose_file.close();
     }
     return q;
@@ -466,7 +478,7 @@ double computeEntropy() {
         sum_weight += set_particle_t[i].weight;
     }
     for(int i = 0; i < set_particle_t.size(); i++) {
-        // set_particle_t[i].weight = set_particle_t[i].weight/sum_weight;
+        set_particle_t[i].weight = set_particle_t[i].weight/sum_weight;
         entropy = entropy - set_particle_t[i].weight * log2(set_particle_t[i].weight);
     }
     ROS_INFO("Entropy = %f.", entropy);

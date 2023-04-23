@@ -9,10 +9,10 @@
 		<param name = "~laser_pose_theta" type = "double" value = "0.0"/>
 		
 		<param name = "~agumented_mcl" type = "bool" value = "true"/>
-		<param name = "~uniform_pdf" type = "bool" value = "false"/>
-        	<param name = "~table_lookup" type = "bool" value = "false"/>
+		<param name = "~uniform_pdf" type = "bool" value = "true"/>
+        	<param name = "~lookup_table" type = "bool" value = "true"/>
         	<param name = "~get_entropy" type = "bool" value = "false"/>
-        	<param name = "~lookup_table_path" type = "string" value = "$(find mcl)/launch/table_lookup_file.txt"/>
+        	<param name = "~lookup_table_path" type = "string" value = "$(find mcl)/launch/lookup_table_file.txt"/>
         	<param name = "~last_pose_path" type = "string" value = "$(find mcl)/launch/last_pose_file.txt"/>
 	</node>
 </launch>

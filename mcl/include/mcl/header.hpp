@@ -87,7 +87,7 @@ double match_rate;
 #define no_empt 1
 
 int model_type;
-bool table_lookup;
+bool lookup_table;
 bool uniform_pdf;
 string lookup_table_path;
 bool save_last_pose;
@@ -115,7 +115,7 @@ vector<double> set_weight;
 void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
 
-void table_weight();
+void get_lookuptable();
 void uniform_sample(nav_msgs::OccupancyGrid& map);
 void normal_sample();
 

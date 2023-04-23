@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~model_type", model_type))
         model_type = 0;
 
-    if(!ros::param::get("~table_lookup", table_lookup))
-        table_lookup = true;
+    if(!ros::param::get("~lookup_table", lookup_table))
+        lookup_table = true;
     if(!ros::param::get("~lookup_table_path", lookup_table_path))
         lookup_table_path = "";
     if(!ros::param::get("~last_pose_path", last_pose_path))
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     while(ros::ok()) {
         ros::spinOnce();
         if(first_time) {
-            table_weight();
+            get_lookuptable();
             if(error_) break;
         }
         if(!first_time && _data) {
@@ -178,9 +178,7 @@ int main(int argc, char **argv) {
                 u_t_[0] = odom_t_1; u_t_[1] = odom_t;
                 update_motion(u_t_);
             }
-            if(get_entropy) {
-                computeEntropy();
-            }
+            if(get_entropy) computeEntropy();
             lz_pose = MeanAndCovariance();
             amcl_pose_pub.publish(lz_pose);
 
