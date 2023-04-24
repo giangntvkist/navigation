@@ -155,7 +155,12 @@ void normal_sample() {
         //     last_pose_file >> x_0 >> y_0 >> theta_0;
         // }
         // last_pose_file.close();
-        last_pose_file >> x_0 >> y_0 >> theta_0;
+        if(last_pose_file.is_open()) {
+            last_pose_file >> x_0 >> y_0 >> theta_0;
+        }else {
+            ROS_ERROR("Last pose file can't open!");
+            error_ = true;
+        }
     }else {
         x_0 = init_pose_x;
         y_0 = init_pose_y;
@@ -473,7 +478,12 @@ geometry_msgs::PoseWithCovarianceStamped MeanAndCovariance() {
         // }
         // last_pose_file.close();
         last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
-        last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
+        if(last_pose_file.is_open()) {
+            last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
+        }else {
+            ROS_ERROR("Last pose file can't open!");
+            error_ = true;
+        }
     }
     return q;
 }
