@@ -138,6 +138,11 @@ int main(int argc, char **argv) {
     Pose u_t[2];
     geometry_msgs::PoseWithCovarianceStamped lz_pose;
     bool _init_sample = false;
+    last_pose_file.open(last_pose_path);
+    if(last_pose_file.fail()) {
+        ROS_ERROR("Invalid last pose link!");
+        return 1;
+    }
     ros::Rate rate(frequency_publish);
     while(ros::ok()) {
         ros::spinOnce();
@@ -205,5 +210,6 @@ int main(int argc, char **argv) {
         }
         rate.sleep();
     }
+    last_pose_file.close();
     return 0;
 }

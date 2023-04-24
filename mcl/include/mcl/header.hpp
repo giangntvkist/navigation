@@ -140,3 +140,4 @@ bool first_time = true, error_ = false;
 bool init_localization = false;
 
 bool map_valid(int idx, int idy);
+fstream last_pose_file;

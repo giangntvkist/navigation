@@ -146,15 +146,16 @@ void normal_sample() {
 
     double x_0, y_0, theta_0;
     if(!set_init_pose) {
-        ifstream last_pose_file;
-        last_pose_file.open(last_pose_path);
-        if(last_pose_file.fail()) {
-            ROS_ERROR("Invalid last pose link!");
-            error_ = true;
-        }else {
-            last_pose_file >> x_0 >> y_0 >> theta_0;
-        }
-        last_pose_file.close();
+        // ifstream last_pose_file;
+        // last_pose_file.open(last_pose_path);
+        // if(last_pose_file.fail()) {
+        //     ROS_ERROR("Invalid last pose link!");
+        //     error_ = true;
+        // }else {
+        //     last_pose_file >> x_0 >> y_0 >> theta_0;
+        // }
+        // last_pose_file.close();
+        last_pose_file >> x_0 >> y_0 >> theta_0;
     }else {
         x_0 = init_pose_x;
         y_0 = init_pose_y;
@@ -462,15 +463,17 @@ geometry_msgs::PoseWithCovarianceStamped MeanAndCovariance() {
     q.pose.covariance[7] = mean_y;
     q.pose.covariance[35] = mean_theta;
     if(save_last_pose) {
-        ofstream last_pose_file;
+        // ofstream last_pose_file;
+        // last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
+        // if(last_pose_file.fail()) {
+        //     ROS_ERROR("Invalid last pose link!");
+        //     error_ = true;
+        // }else {
+        //     last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
+        // }
+        // last_pose_file.close();
         last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
-        if(last_pose_file.fail()) {
-            ROS_ERROR("Invalid last pose link!");
-            error_ = true;
-        }else {
-            last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
-        }
-        last_pose_file.close();
+        last_pose_file << q.pose.pose.position.x << " " << q.pose.pose.position.y << " " << mean_theta;
     }
     return q;
 }
