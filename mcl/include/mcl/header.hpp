@@ -67,7 +67,10 @@ double min_rot;
 int min_particles;
 int max_particles;
 int throttle_scan;
+<<<<<<< HEAD
 int outlier_point;
+=======
+>>>>>>> 76a06a221d3e55faf86486576a6c0365103f7cad
 double range_max;
 double bin_size_x, bin_size_y, bin_size_theta;
 double kld_eps, kld_delta;
