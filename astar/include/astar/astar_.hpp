@@ -1,7 +1,7 @@
 #pragma once
 #include "astar/astar.hpp"
 
-void mapCallback(const nav_msgs::OccupancyGrid& msg){
+void Astar::mapCallback(const nav_msgs::OccupancyGrid& msg){
     cost_map.header.frame_id = msg.header.frame_id;
     cost_map.info.width = msg.info.width;
     cost_map.info.height = msg.info.height;
@@ -12,71 +12,71 @@ void mapCallback(const nav_msgs::OccupancyGrid& msg){
     _map = true;
 }
 
-void initposeCallback(const geometry_msgs::PoseWithCovarianceStamped& msg) {
-    init_pose.v[0] = msg.pose.pose.position.x;
-    init_pose.v[1] = msg.pose.pose.position.y;
+void Astar::initposeCallback(const geometry_msgs::PoseWithCovarianceStamped& msg) {
+    init_point_.v[0] = msg.pose.pose.position.x;
+    init_point_.v[1] = msg.pose.pose.position.y;
     _initpose = true;
 }
 
-void goalposeCallback(const geometry_msgs::PoseStamped& msg) {
-    goal_pose.v[0] = msg.pose.position.x;
-    goal_pose.v[1] = msg.pose.position.y;
+void Astar::goalposeCallback(const geometry_msgs::PoseStamped& msg) {
+    goal_point_.v[0] = msg.pose.position.x;
+    goal_point_.v[1] = msg.pose.position.y;
     _goalpose = true;
 }
 
-bool map_valid(nav_msgs::OccupancyGrid& map, int i, int j) {
+bool Astar::map_valid(nav_msgs::OccupancyGrid& map, int i, int j) {
     return i >= 0 && i < map.info.width && j >=0 && j < map.info.height;
 }
 
-Astar::Astar(vector_t init_point, vector_t goal_point) {
-    init_point_ = init_point;
-    goal_point_ = goal_point;
+int Astar::cell_id(vector_t init_point, nav_msgs::OccupancyGrid& map) {
+    int idx = (init_point.v[0] - map.info.origin.position.x)/map.info.resolution;
+    int idy = (init_point.v[1] - map.info.origin.position.y)/map.info.resolution;
+    if(map_valid(map, idx, idy)) {
+        return idy*map.info.width + idx;
+    }else {
+        ROS_ERROR("Invalid initial pose!");
+        return -1;
+    }
 }
 
 void Astar::astar_init(set_node_t& nodes, nav_msgs::OccupancyGrid& map) {
     nodes.vec_node_t.clear();
-    cell_map init_cell;
-    init_cell.idx = (init_point_.v[0] - map.info.origin.position.x)/map.info.resolution;
-    init_cell.idy = (init_point_.v[1] - map.info.origin.position.y)/map.info.resolution;
-    if(map_valid(map, init_cell.idx, init_cell.idy)) {
-        int ID = init_cell.idy*map.info.width + init_cell.idx;
-        node_t n;
-        for(int i = 0; i < map.data.size(); i++) {
-            n.node.id_node = i;
-            n.node.cell.idy = i/map.info.width;
-            n.node.cell.idx = i - n.node.cell.idy * map.info.width;
-            n.node.position.v[0] = n.node.cell.idx * map.info.resolution + map.info.origin.position.x;
-            n.node.position.v[1] = n.node.cell.idy * map.info.resolution + map.info.origin.position.y;
-            n.node.close = false;
-            if(i != ID) {
-                n.node.past_cost = inf;
-            }else {
-                n.node.past_cost = 0.0;
-            }
-            nodes.vec_node_t.push_back(n);
+    node_t n;
+    int ID = cell_id(init_point_, map);
+    for(int i = 0; i < map.data.size(); i++) {
+        n.node.id_node = i;
+        n.node.cell.idy = i/map.info.width;
+        n.node.cell.idx = i - n.node.cell.idy * map.info.width;
+        n.node.position.v[0] = n.node.cell.idx * map.info.resolution + map.info.origin.position.x;
+        n.node.position.v[1] = n.node.cell.idy * map.info.resolution + map.info.origin.position.y;
+        n.node.close = false;
+        if(i != ID) {
+            n.node.past_cost = inf;
+        }else {
+            n.node.past_cost = 0.0;
         }
-    }else {
-        ROS_ERROR("Invalid initial pose!");
+        nodes.vec_node_t.push_back(n);
     }
 }
 
-double Astar::cost(node_t& a, node_t& b) {
-    if(a.node.cell.idx == b.node.cell.idx || a.node.cell.idy == b.node.cell.idy) {
+double Astar::cost(node_& a, node_& b) {
+    if(a.cell.idx == b.cell.idx || a.cell.idy == b.cell.idy) {
         return 1.0;
     }else {
         return sqrt(2.0);
     }
 }
 
-double Astar::heuristic_cost(node_t& a, nav_msgs::OccupancyGrid& map) {
+double Astar::heuristic_cost(node_& a, nav_msgs::OccupancyGrid& map) {
     cell_map goal_cell;
     goal_cell.idx = (goal_point_.v[0] - map.info.origin.position.x)/map.info.resolution;
     goal_cell.idy = (goal_point_.v[1] - map.info.origin.position.x)/map.info.resolution;
-    return eta*sqrt(pow(a.node.cell.idx- goal_cell.idx, 2) + pow(a.node.cell.idy - goal_cell.idy, 2));
+    return eta*sqrt(pow(a.cell.idx- goal_cell.idx, 2) + pow(a.cell.idy - goal_cell.idy, 2));
 }
 
 bool Astar::collision_check(node_t& a, node_t& b, nav_msgs::OccupancyGrid& map) {
-    double eps, idx, idy;
+    double eps;
+    int idx, idy;
     double x_step, y_step;
     vector<node_t> vec_A;
     vec_A.clear();
@@ -94,11 +94,11 @@ bool Astar::collision_check(node_t& a, node_t& b, nav_msgs::OccupancyGrid& map) 
         for(int i = 0; i < vec_A.size(); i++) {
             idx = (vec_A[i].node.position.v[0] - map.info.origin.position.x)/map.info.resolution;
             idy = (vec_A[i].node.position.v[1] - map.info.origin.position.y)/map.info.resolution;
-            if(map_valid(map, idx, idy) && map.data[idy*map.info.width + idx] != free) {
+            if(!map_valid(map, idx, idy) || map.data[idy*map.info.width + idx] != free) {
                 return true;
             }
         }
-    }while(eps >1e-4);
+    }while(eps > 1e-4);
     return false;
 }
 
@@ -109,7 +109,7 @@ void Astar::neighbor_func(node_t& a, set_node_t& nodes, nav_msgs::OccupancyGrid&
             for(int j = a.node.cell.idy - 1; j <= a.node.cell.idy + 1; j++) {
                 if(j >= 0 && j < map.info.height) {
                     int ID = j*map.info.width + i;
-                    if(map.data[ID] == free && nodes.vec_node_t[ID].node.close == false) {
+                    if(map.data[ID] == free && nodes.vec_node_t[ID].node.close == false && collision_check(a, nodes.vec_node_t[ID], map) == false) {
                         a.neighbor.push_back(nodes.vec_node_t[ID].node);
                     }
                 }
@@ -186,7 +186,7 @@ void Astar::smooth_func(set_node_t& path, nav_msgs::OccupancyGrid& map) {
     int K = tmp.vec_node_t.size();
     do {
         for(int i = 0; i < K; i++) {
-            if(collision_check(node_goal, tmp.vec_node_t[i], map)) {
+            if(!collision_check(node_goal, tmp.vec_node_t[i], map)) {
                 node_goal = tmp.vec_node_t[i];
                 path.vec_node_t.push_back(tmp.vec_node_t[i]);
                 K = i;
@@ -200,5 +200,72 @@ void Astar::smooth_func(set_node_t& path, nav_msgs::OccupancyGrid& map) {
 void Astar::path_planning(set_node_t& path, nav_msgs::OccupancyGrid& map) {
     set_node_t all_nodes;
     astar_init(all_nodes, map);
-    set_node_t OPEN, CLOSED;
+    vector<node_> OPEN;
+    set_node_t CLOSED;
+    int ID_init_node = cell_id(init_point_, map);
+    int ID_goal_node = cell_id(goal_point_, map);
+    OPEN.push_back(all_nodes.vec_node_t[ID_init_node].node);
+    node_t current_node;
+    while(OPEN.size() != 0) {
+        current_node.node = OPEN[0];
+        OPEN.erase(OPEN.begin());
+        CLOSED.vec_node_t.push_back(current_node);
+        all_nodes.vec_node_t[current_node.node.id_node].node.close = true;
+        if(current_node.node.id_node == ID_goal_node) {
+            ROS_INFO("Path planning is successful!");
+            _success = true;
+            break;
+        }
+        neighbor_func(current_node, all_nodes, map);
+        for(int i = 0; i < current_node.neighbor.size(); i++) {
+            double tentative_past_cost = current_node.node.past_cost + cost(current_node.node, current_node.neighbor[i]);
+            if(tentative_past_cost < current_node.neighbor[i].past_cost) {
+                current_node.neighbor[i].past_cost = tentative_past_cost;
+                all_nodes.vec_node_t[current_node.neighbor[i].id_node].node.past_cost = tentative_past_cost;
+                current_node.neighbor[i].id_node_parent = current_node.node.id_node;
+                all_nodes.vec_node_t[current_node.neighbor[i].id_node].node.id_node_parent = current_node.node.id_node;
+                OPEN.push_back(current_node.neighbor[i]);
+            }
+        }
+        for(int i = 0; i < OPEN.size() - 1; i++) {
+            for(int j = i+1; j < OPEN.size(); j++) {
+                double total_cost1 = OPEN[i].past_cost + heuristic_cost(OPEN[i], map);
+                double total_cost2 = OPEN[j].past_cost + heuristic_cost(OPEN[j], map);
+                if(total_cost1 > total_cost2) {
+                    node_ temp = OPEN[i];
+                    OPEN[i] = OPEN[j];
+                    OPEN[j] = temp;
+                }
+            }
+        }
+    }
+    if(_success) {
+        node_t node_last;
+        node_t node_goal = CLOSED.vec_node_t.back();
+        path.vec_node_t.clear();
+        path.vec_node_t.push_back(node_goal);
+        node_last = node_goal;
+        while(node_last.node.id_node != ID_init_node) {
+            node_last = all_nodes.vec_node_t[node_last.node.id_node_parent];
+            path.vec_node_t.push_back(node_last);
+        }
+        make_line(path);
+        // // least_square(path, map);
+        smooth_func(path, map);
+    }
+}
+
+void Astar::astar_publisher() {
+    nav_msgs::Path path_Astar;
+    geometry_msgs::PoseStamped p;
+    path_Astar.header.frame_id = map_frame;
+    path_Astar.header.stamp = ros::Time::now();
+    path_Astar.poses.clear();
+    for(int i = 0; i < path_.vec_node_t.size(); i++) {
+        p.pose.position.x = path_.vec_node_t[i].node.position.v[0];
+        p.pose.position.y = path_.vec_node_t[i].node.position.v[1];
+        p.pose.position.z = 0.0;
+        path_Astar.poses.push_back(p);
+    }
+    path_pub.publish(path_Astar);
 }
