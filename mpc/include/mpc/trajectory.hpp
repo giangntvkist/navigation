@@ -51,33 +51,39 @@ struct Vector{
     double ny;
 };
 
+struct Polygon{
+    vector<Point> vertices;
+    Point centroid;
+    double radius;
+};
+
+double V_max;
+double at_max;
+double V_wheelmax;
+double mass;
+double W_max;
+double F_max;
+double L;
+double wheel_radius;
+double J_max;
+
 vector<Point> points;
 Point target_pose;
 int num_point;
 State lz_pose;
 
-bool path_;
-bool lzpose_;
-
-double V_limit;
-double a_limit;
-double J_limit;
-
 class Trajectory {
-    private:
+    public:
         int M;
         vector<Point> c0, c1, c2, c3, c4, c5;
         vector<double> U, T, arc_length;
-        
+
         void path_planner(vector<Point>& p1, State& p2);
         double func(double u, int idx);
         double func_curve(double u, int idx);
         double inter_Romberg(double (*f)(double, int), double a, double b, int idx);
-        void split_spline(double V_init = 0, double V_end = 0);
+        void split_spline(double V_init, double V_end);
 
-    public:
-        Trajectory () {};
         State scurve_trajectory(double t);
         State bezier_trajectory(double t);
-        ~Trajectory() {};
 };

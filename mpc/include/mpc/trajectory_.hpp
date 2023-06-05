@@ -11,9 +11,9 @@ State Trajectory::scurve_trajectory(double t) {
         ky = points[i+1].y - points[i].y;
         d = sqrt(pow(kx, 2) + pow(ky, 2));
 
-        v = V_limit/d;
-        a = a_limit/d;
-        J = J_limit/d;
+        v = V_max/d;
+        a = at_max/d;
+        J = J_max/d;
         if(v*v/a + a*v/J >= 1 || a/J >= v/a) {
             ROS_WARN("Choosing the wrong parameter v a J!");
         }
@@ -30,7 +30,7 @@ State Trajectory::scurve_trajectory(double t) {
         if(t <= t1) {
             n = J*t;
             m = J*t*t/2;
-            s = J*pow(t, 3)/6
+            s = J*pow(t, 3)/6;
         }else if(t > t1 && t <= t2) {
             n = a;
             m = a*t - a*a/(2*J);
@@ -242,8 +242,8 @@ double Trajectory::inter_Romberg(double (*f)(double, int), double a, double b, i
     return R1[max_step-1];
 }
 
-void Trajectory::split_spline(double V_init = 0, double V_end = 0) {
-    double L_h, L;
+void Trajectory::split_spline(double V_init, double V_end) {
+    double L_h, L_;
     double del_s, del_length;
     double length[num_point-1];
     int k;
@@ -258,17 +258,17 @@ void Trajectory::split_spline(double V_init = 0, double V_end = 0) {
     U.clear();
     arc_length.clear();
     path_planner(points, lz_pose);
-    L = 0;
+    L_ = 0;
     for(int i = 0; i < num_point-1; i++) {
         length[i] = inter_Romberg(func,0,1,i);
         arc_length.push_back(length[i]);
-        L += length[i];
+        L_ += length[i];
     }
-    del_s = L;
+    del_s = L_;
     M = 1;
     while(del_s > 0.02) {
         M += 1;
-        del_s = L/M;
+        del_s = L_/M;
     }
     for(int i = 0; i <= M; i++) {
         L_h = 0;

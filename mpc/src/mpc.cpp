@@ -1,4 +1,4 @@
-#include "mpc/mpc.hpp"
+#include "mpc/mpc_.hpp"
 int main(int argc,char **argv) {
     ROS_INFO("Running model predict controller node!");
     ros::init(argc, argv, "mpc");
