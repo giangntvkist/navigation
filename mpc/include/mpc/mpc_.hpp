@@ -379,7 +379,7 @@ void MPC::mpc_publisher() {
 
     nav_msgs::Path path_predict;
     geometry_msgs::PoseStamped pose_predict;
-    path_predict.header.frame_id = "map_base_link";
+    path_predict.header.frame_id = "map_frame";
     path_predict.header.stamp = ros::Time::now();
     path_predict.poses.clear();
     for(int i = 0; i < N_predictsize+1; i++) {
