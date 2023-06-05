@@ -214,7 +214,7 @@ void MPC::initial_optimal() {
     opts["print_time"] = 0;
     opts["ipopt.print_level"] = 0;
     opts["ipopt.acceptable_tol"] = 1e-8;
-    opts["ipopt.max_iter"] = 1000;
+    opts["ipopt.max_iter"] = max_iter;
     opts["ipopt.acceptable_obj_change_tol"] = 1e-6;
 
     lbx = DM::zeros(3*(N_predictsize+1)+3*N_predictsize,1);
