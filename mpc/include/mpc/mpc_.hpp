@@ -59,8 +59,6 @@ Polygon MPC::polygon_centroid(Polygon p) {
     double a_so = 0;
     double mx = 0, my = 0;
     double m;
-    Point p_robot;
-    p_robot.x = lz_pose.x; p_robot.y = lz_pose.y;
     if(p.vertices.size() > 2) {
         p.vertices.push_back(p.vertices[0]);
         for(int i = 0; i < p.vertices.size()-1; i++) {
@@ -140,7 +138,7 @@ Polygon MPC::polygon_centroid(Polygon p) {
     return p;
 }
 
-bool MPC::comparePolygon(Polygon p1, Polygon p2) {
+bool comparePolygon(Polygon p1, Polygon p2) {
     double d1 = pow(lz_pose.x - p1.centroid.x, 2) + pow(lz_pose.y - p1.centroid.y, 2);
     double d2 = pow(lz_pose.x - p2.centroid.x, 2) + pow(lz_pose.y - p2.centroid.y, 2);
     return (d1 < d2);   

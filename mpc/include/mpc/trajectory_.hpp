@@ -27,7 +27,7 @@ State Trajectory::scurve_trajectory(double t) {
         t6 = T - t1;
         t7 = T;
         double n, m, s;
-        if(t <= t1) {
+        if(t > t0 && t <= t1) {
             n = J*t;
             m = J*t*t/2;
             s = J*pow(t, 3)/6;
@@ -211,20 +211,20 @@ double Trajectory::func_curve(double u, int idx) {
     return curve;
 }
 
-double Trajectory::inter_Romberg(double (*f)(double, int), double a, double b, int idx) {
+double Trajectory::inter_Romberg(double a, double b, int idx) {
     int max_step = 100;
     double acc = 1e-3;
     double c;
     double ep;
     vector<double> R1, R2;
     double h = (b - a);
-    R1.push_back((f(a, idx) + f(b, idx))*h*0.5);
+    R1.push_back((func(a, idx) + func(b, idx))*h*0.5);
     for(int i = 1; i < max_step; i++) {
         h = 0.5*h;
         c = 0;
         ep = 1 << (i-1); // 2^(n-1)
         for(int j = 1; j <= ep; j++){
-            c = c + f(a+(2*j-1)*h, idx);
+            c = c + func(a+(2*j-1)*h, idx);
         }
         R2.push_back(h*c + 0.5*R1[0]);
         for(int j = 1; j <= i; j++){
@@ -260,7 +260,7 @@ void Trajectory::split_spline(double V_init, double V_end) {
     path_planner(points, lz_pose);
     L_ = 0;
     for(int i = 0; i < num_point-1; i++) {
-        length[i] = inter_Romberg(func,0,1,i);
+        length[i] = inter_Romberg(0,1,i);
         arc_length.push_back(length[i]);
         L_ += length[i];
     }
@@ -298,7 +298,7 @@ void Trajectory::split_spline(double V_init, double V_end) {
         u_left = 0;
         u_right = 1;
         u = (u_left + u_right)/2;
-        eps = inter_Romberg(func,0,u,k) - del_length;
+        eps = inter_Romberg(0,u,k) - del_length;
         while(fabs(eps) > 10e-4) {
             if(eps < 0) {
                 u_left = u;
@@ -306,7 +306,7 @@ void Trajectory::split_spline(double V_init, double V_end) {
                 u_right = u;
             }
             u = (u_left + u_right)/2;
-            eps = inter_Romberg(func,0,u,k) - del_length;
+            eps = inter_Romberg(0,u,k) - del_length;
         }
         U.push_back(u);
         c = func_curve(u, k);

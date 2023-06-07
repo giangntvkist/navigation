@@ -7,6 +7,7 @@ using namespace casadi;
 #define INF 1e4
 #define cm_m 100
 
+inline bool comparePolygon(Polygon p1, Polygon p2);
 class MPC {
     private:
         ros::Subscriber path_sub;
@@ -47,7 +48,6 @@ class MPC {
         void polygonCallback(const visualization_msgs::MarkerArray& msg);
         double norm_2(Point q1, Point q2);
         Polygon polygon_centroid(Polygon p);
-        bool comparePolygon(Polygon p1, Polygon p2);
         void trajectory_publisher();
         void initial_optimal();
         void optimal_solution();

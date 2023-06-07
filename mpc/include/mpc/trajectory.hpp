@@ -81,7 +81,7 @@ class Trajectory {
         void path_planner(vector<Point>& p1, State& p2);
         double func(double u, int idx);
         double func_curve(double u, int idx);
-        double inter_Romberg(double (*f)(double, int), double a, double b, int idx);
+        double inter_Romberg(double a, double b, int idx);
         void split_spline(double V_init, double V_end);
 
         State scurve_trajectory(double t);
