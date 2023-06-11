@@ -60,6 +60,7 @@ struct Obstacle{
     double theta;
     double v;
     double radius;
+    vector<Point> vertices;
 };
 
 #define bezier_ 1
@@ -68,7 +69,7 @@ struct Obstacle{
 #define cm_m 0.01
 
 vector<Point> global_path;
-vector<Obstacle> set_obs;
+vector<Obstacle> set_obs, set_obs_nearest;
 State lz_pose;
 Point target_pose;
 int num_waypoints;
@@ -105,12 +106,13 @@ double T_sample;
 int N_predictsize;
 int N_predictcontrol;
 double e_safety;
-int N_maxobstacles;
+int N_obstacles, N_maxobstacles;
 
 double publish_frequency;
 int max_iter;
 
 double kernel_size, max_dist;
+double err_goal;
 
 double t;
 
@@ -118,6 +120,9 @@ void pathCallback(const nav_msgs::Path& msg);
 void x_poseCallback(const std_msgs::Float64& msg);
 void y_poseCallback(const std_msgs::Float64& msg);
 void theta_poseCallback(const std_msgs::Float64& msg);
+
+bool compare_obstacles(Obstacle p1, Obstacle p2);
+void get_obstacles(Obstacle& p);
 
 void quintic_bezier_splines(vector<Point>& path);
 double func(double u, int idx);
@@ -127,7 +132,8 @@ void numerical_velocity_profile(double V_init, double V_end);
 State bezier_trajectory(double t);
 State scurve_trajectory(double t);
 
-void obstaclesCallback(const costmap_converter::ObstacleArrayMsg& msg);
+// void obstaclesCallback(const costmap_converter::ObstacleArrayMsg& msg);
 void trajectory_publisher();
+void get_obstacles_nearest(vector<Obstacle>& set_obs_, vector<Obstacle>& set_obs_nearest_);
 
 

@@ -17,13 +17,14 @@ int main(int argc,char **argv) {
     x_pose_sub = nh.subscribe("x_position", 10, x_poseCallback);
     y_pose_sub = nh.subscribe("y_position", 10, y_poseCallback);
     theta_pose_sub = nh.subscribe("angle", 10, theta_poseCallback);
-    obs_sub = nh.subscribe("obstacles",10, obstaclesCallback);
+    obs_sub = nh.subscribe("visualization_marker",10, obstaclesCallback);
 
     if(!ros::param::get("~publish_frequency", publish_frequency)) publish_frequency = 10;
 
     if(!ros::param::get("~T_sample", T_sample)) T_sample = 0.5;
     if(!ros::param::get("~N_predictsize", N_predictsize)) N_predictsize = 10;
     if(!ros::param::get("~N_predictcontrol", N_predictcontrol)) N_predictcontrol = 8;
+    if(!ros::param::get("~N_maxobstacles", N_maxobstacles)) N_maxobstacles = 5;
     if(!ros::param::get("~e_safety", e_safety)) e_safety = 0.1;
 
     if(!ros::param::get("~V_max", V_max)) V_max = 0.3;
@@ -42,6 +43,7 @@ int main(int argc,char **argv) {
     if(!ros::param::get("~max_iter", max_iter)) max_iter = 1000;
     if(!ros::param::get("~kernel_size", kernel_size)) kernel_size = 3.0;
     if(!ros::param::get("~max_dist", max_dist)) max_dist = 3.0;
+    if(!ros::param::get("~err_goal", err_goal)) err_goal = 0.05;
 
     SX X = SX::sym("X", 4, N_predictsize+1);
     SX V = SX::sym("V", 4, N_predictsize);
@@ -104,6 +106,7 @@ int main(int argc,char **argv) {
     ros::Time current_time, last_time;
     current_time = ros::Time::now();
     last_time = ros::Time::now();
+    
     ros::Rate rate(publish_frequency);
     while(ros::ok()) {
         ros::spinOnce();
@@ -112,7 +115,7 @@ int main(int argc,char **argv) {
             trajectory_publisher();
         }
         if(trajectory_ && lzpose_ && control_ && obstacles_) {
-            if(sqrt(pow(lz_pose.x - target_pose.x,2) + pow(lz_pose.y - target_pose.y,2)) < 0.05) {
+            if(sqrt(pow(lz_pose.x - target_pose.x,2) + pow(lz_pose.y - target_pose.y,2)) < err_goal) {
                 ROS_INFO(" Robot is at the target point!");
                 control_ = false;
                 v1.data = 0.0;
@@ -135,11 +138,13 @@ int main(int argc,char **argv) {
             args["ubx"] = ubx;
             args["x0"] = DM::vertcat({reshape(x0, 3*(N_predictsize+1),1), reshape(u0,3*N_predictsize,1)});
 
-            DM lbg = DM::zeros(4*(N_predictsize+1) + N_predictsize*N_maxobstacles, 1);
-            DM ubg = DM::zeros(4*(N_predictsize+1) + N_predictsize*N_maxobstacles, 1);
-            ubg(Slice(4*(N_predictsize+1), 4*(N_predictsize+1) + N_predictsize*N_maxobstacles)) = INF;
+            get_obstacles_nearest(set_obs, set_obs_nearest);
 
-            DM p_ = DM::zeros(5, N_predictsize+1+N_maxobstacles);
+            DM lbg = DM::zeros(4*(N_predictsize+1) + N_predictsize*N_obstacles, 1);
+            DM ubg = DM::zeros(4*(N_predictsize+1) + N_predictsize*N_obstacles, 1);
+            ubg(Slice(4*(N_predictsize+1), 4*(N_predictsize+1) + N_predictsize*N_obstacles)) = INF;
+
+            DM p_ = DM::zeros(5, N_predictsize+1+N_obstacles);
             p_(Slice(),0) = {lz_pose.x, lz_pose.y, 0, 0, lz_pose.theta};
             for(int i = 0; i < N_predictsize; i++) {
                 switch (trajectory_type) {
@@ -160,10 +165,10 @@ int main(int argc,char **argv) {
                 }
                 p_(Slice(),i+1) = {q_ref.x, q_ref.y, q_ref.vx, q_ref.vy, q_ref.theta};
             }
-            for(int i = 0; i < N_maxobstacles; i++) {
-                p_(Slice(), N_predictsize+1+i) = {set_obs[i].x, set_obs[i].y, set_obs[i].theta, set_obs[i].v, set_obs[i].radius};
+            for(int i = 0; i < N_obstacles; i++) {
+                p_(Slice(), N_predictsize+1+i) = {set_obs_nearest[i].x, set_obs_nearest[i].y, set_obs_nearest[i].theta, set_obs_nearest[i].v, set_obs_nearest[i].radius};
             }
-            SX p = SX::sym("p", 5, N_predictsize+1+N_maxobstacles);
+            SX p = SX::sym("p", 5, N_predictsize+1+N_obstacles);
             p = (SX)p_;
             if(sqrt(pow(lz_pose.x - q_ref.x,2) + pow(lz_pose.y - q_ref.y,2)) < max_dist) {
                 t = t + dt;
@@ -194,7 +199,7 @@ int main(int argc,char **argv) {
             }
             for(int k = 0; k < N_predictsize; k++) {
                 SX q_knext = X(Slice(), k+1);
-                for(int i = 0; i < N_maxobstacles; i++) {
+                for(int i = 0; i < N_obstacles; i++) {
                     SX q_obs = p(Slice(), N_predictsize+1+i);
                     if((double)q_obs(3,0) > 1e-2) {
                         q_obs(0,0) += (k+1)*T_sample*q_obs(3,0)*cos(q_obs(2,0));
