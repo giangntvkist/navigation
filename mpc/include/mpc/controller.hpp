@@ -1,11 +1,6 @@
 #pragma once
 #include "mpc/mpc.hpp"
 
-// void obstaclesCallback(const costmap_converter::ObstacleArrayMsg& msg) {
-//     obstacles_ = true;
-//     N_maxobstacles = 5;
-// }
-
 void obstaclesCallback(const visualization_msgs::MarkerArray& msg) {
     Obstacle p;
     Point vert;
@@ -19,6 +14,7 @@ void obstaclesCallback(const visualization_msgs::MarkerArray& msg) {
         }
         set_obs.push_back(p);
     }
+    N_obstacles = set_obs.size();
     obstacles_ = true;
 }
 
@@ -44,10 +40,10 @@ void trajectory_publisher() {
             }
     }
 	geometry_msgs::PoseStamped p;
-	path.header.frame_id = "map_frame";
+	path.header.frame_id = map_frame;
 	path.header.stamp = ros::Time::now();
-	p.pose.position.x = int(q.x/cm_m);
-	p.pose.position.y = int(q.y/cm_m);
+	p.pose.position.x = q.x/cm_m;
+	p.pose.position.y = q.y/cm_m;
 	path.poses.push_back(p);  
     for(int i = 1; i < T[M]/0.01; i++){	
 		double dt = i*0.01;
@@ -67,8 +63,8 @@ void trajectory_publisher() {
                 ROS_ERROR("Trajectory type incorrect!");
             }
     }
-		p.pose.position.x = int(q.x/cm_m);
-		p.pose.position.y = int(q.y/cm_m);
+		p.pose.position.x = q.x/cm_m;
+		p.pose.position.y = q.y/cm_m;
 		path.poses.push_back(p);	
 	}
 	tra_pub.publish(path);;
@@ -129,6 +125,7 @@ void get_obstacles(Obstacle& p) {
         p.radius = 0.5*sqrt(pow(p.vertices[0].x - p.vertices[1].x,2) + pow(p.vertices[0].y - p.vertices[1].y,2));
     }
     p.v = 0.0;
+    p.theta = 0.0;
     // if(p.vertices.size() > 3) {
     //     for(int i = 0; i < p.vertices.size()-1; i++) {
     //         m = p.vertices[i].x*p.vertices[i+1].y - p.vertices[i+1].x*p.vertices[i].y;
@@ -173,15 +170,16 @@ void get_obstacles_nearest(vector<Obstacle>& set_obs_, vector<Obstacle>& set_obs
     }
     sort(set_obs_.begin(), set_obs_.end(), compare_obstacles);
     set_obs_nearest_.clear();
-    if(set_obs_.size() <= N_maxobstacles) {
-        N_obstacles = set_obs_.size();
-        for(int i = 0; i < N_obstacles; i++) {
+    if(N_obstacles > N_maxobstacles) {
+        for(int i = 0; i < N_maxobstacles; i++) {
             set_obs_nearest_.push_back(set_obs_[i]);
         }
     }else {
-        N_obstacles = N_maxobstacles;
         for(int i = 0; i < N_obstacles; i++) {
             set_obs_nearest_.push_back(set_obs_[i]);
         }
-    }
+        for(int i = 0; i < N_maxobstacles - N_obstacles; i++) {
+            set_obs_nearest_.push_back(set_obs_[0]);
+        }
+    }  
 }

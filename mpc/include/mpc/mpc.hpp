@@ -66,21 +66,28 @@ struct Obstacle{
 #define bezier_ 1
 #define scurve_ 2
 #define INF 1e4
-#define cm_m 0.01
+// #define cm_m 1.0
+#define cm_m 100.0
 
 vector<Point> global_path;
 vector<Obstacle> set_obs, set_obs_nearest;
 State lz_pose;
 Point target_pose;
 int num_waypoints;
+double V_wheel[3];
 
 ros::Publisher vel1_pub, vel2_pub, vel3_pub;
 ros::Publisher tra_pub, path_predict_pub;
 
-ros::Subscriber path_sub, x_pose_sub, y_pose_sub, theta_pose_sub, obs_sub;
+ros::Subscriber path_sub;
+ros::Subscriber x_pose_sub, y_pose_sub, theta_pose_sub;
+ros::Subscriber obs_sub, wheel_vel_sub;
+
+// ros::Subscriber pose_sub;
+// ros::Publisher vel_pub;
 
 bool path_;
-bool lzpose_;
+bool lzpose_, wheel_velocity_;
 bool obstacles_, control_, trajectory_;
 
 int M;
@@ -120,6 +127,8 @@ void pathCallback(const nav_msgs::Path& msg);
 void x_poseCallback(const std_msgs::Float64& msg);
 void y_poseCallback(const std_msgs::Float64& msg);
 void theta_poseCallback(const std_msgs::Float64& msg);
+void poseCallback(const nav_msgs::Odometry& msg);
+void velocityCallback(const std_msgs::Float64MultiArray& msg);
 
 bool compare_obstacles(Obstacle p1, Obstacle p2);
 void get_obstacles(Obstacle& p);
@@ -132,7 +141,6 @@ void numerical_velocity_profile(double V_init, double V_end);
 State bezier_trajectory(double t);
 State scurve_trajectory(double t);
 
-// void obstaclesCallback(const costmap_converter::ObstacleArrayMsg& msg);
 void trajectory_publisher();
 void get_obstacles_nearest(vector<Obstacle>& set_obs_, vector<Obstacle>& set_obs_nearest_);
 

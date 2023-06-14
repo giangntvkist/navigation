@@ -14,6 +14,19 @@ void pathCallback(const nav_msgs::Path& msg) {
     path_ = true;
 }
 
+// void pathCallback(const nav_msgs::Path& msg) {
+//     Point point;
+//     global_path.clear();
+//     for(int i = 0; i < msg.poses.size(); i++) {
+//         point.x = msg.poses[i].pose.position.x;
+//         point.y = msg.poses[i].pose.position.y;
+//         global_path.push_back(point);
+//     }
+//     target_pose = global_path.back();
+//     num_waypoints = global_path.size();
+//     path_ = true;
+// }
+
 void x_poseCallback(const std_msgs::Float64& msg) {
     lz_pose.x = cm_m*msg.data;
     lzpose_ = true;
@@ -27,6 +40,21 @@ void theta_poseCallback(const std_msgs::Float64& msg) {
     double z = msg.data*M_PI/180;
     lz_pose.theta = atan2(sin(z), cos(z));
 }
+
+void velocityCallback(const std_msgs::Float64MultiArray& msg) {
+    V_wheel[0] = msg.data[1];
+    V_wheel[1] = msg.data[0];
+    V_wheel[2] = msg.data[2];
+    wheel_velocity_ = true;
+}
+// void poseCallback(const nav_msgs::Odometry& msg) {
+//     lz_pose.x = msg.pose.pose.position.x;
+//     lz_pose.y = msg.pose.pose.position.y;
+//     lz_pose.theta = tf::getYaw(msg.pose.pose.orientation);
+//     lz_pose.vx = msg.twist.twist.linear.x;
+//     lz_pose.vy = msg.twist.twist.linear.y;
+//     lzpose_ = true;
+// }
 
 void quintic_bezier_splines(vector<Point>& path) {
     vector<double> dis_point;
