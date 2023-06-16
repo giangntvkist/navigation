@@ -41,10 +41,6 @@ void velocityCallback(const std_msgs::Float64MultiArray& msg) {
     data = true;
 }
 
-void normalize(double& theta_) {
-    theta_ = atan2(sin(theta_), cos(theta_));
-}
-
 int main(int argc, char **argv) {
     ros::init(argc,argv,"odometry");
     ROS_INFO("Running odometry node!");
@@ -63,8 +59,8 @@ int main(int argc, char **argv) {
     x = 0.0;
     y = 0.0;
     theta = 0.0;
+    
     ros::Time current_time, last_time;
-
     current_time = ros::Time::now();
     last_time = ros::Time::now();
 
@@ -89,13 +85,10 @@ int main(int argc, char **argv) {
             odom_.pose.pose.position.z = 0.0;
             odom_.pose.pose.orientation = tf::createQuaternionMsgFromYaw(theta);;
   
-        
             odom_.twist.twist.linear.x = V*cos(theta);
             odom_.twist.twist.linear.y = V*sin(theta);
             odom_.twist.twist.angular.z = W;
             odom_pub.publish(odom_);
-
-            normalize(theta);
             last_time = current_time;
         rate.sleep();
     }
