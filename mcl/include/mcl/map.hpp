@@ -19,7 +19,7 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     laser_scan.angle_max = scan.angle_max;
     laser_scan.angle_increment = scan.angle_increment;
     laser_scan.range_min = scan.range_min;
-    laser_scan.range_max = laser_scan.range_max;
+    laser_scan.range_max = scan.range_max;
     laser_scan.ranges.clear();
     for(int i = 0; i < scan.ranges.size(); i += throttle_scan) {
         laser_scan.ranges.push_back(scan.ranges[i]);
