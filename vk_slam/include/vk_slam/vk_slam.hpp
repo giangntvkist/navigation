@@ -35,10 +35,12 @@
 
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Sparse>
 
 using namespace std;
 using namespace Eigen;
 using namespace message_filters;
+typedef Eigen::Triplet<double> T;
 
 /* Define vector have 3 elements x, y, theta */
 struct sl_vector_t {
@@ -75,7 +77,10 @@ struct sl_edge_t {
 struct sl_graph_t {
 	vector<sl_node_t> set_node_t;
 	vector<sl_edge_t> set_edge_t;
+	double cost_value;
 };
+
+#define inf 1e4
 
 double range_min;
 double range_max;
@@ -96,6 +101,7 @@ string odom_frame;
 bool inverted_laser;
 bool loop_closure_detected;
 
+int max_inter;
 double e_converged;
 double map_update_interval;
 
@@ -107,7 +113,6 @@ sl_graph_t graph_t;
 
 double normalize(double z);
 double angle_diff(double a, double b);
-Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& m);
-Eigen::Matrix<double, 3, 6> jacobian_func(sl_node_t& x_i, sl_node_t& x_j, sl_edge_t& z_ij);
-double cost_func(sl_graph_t& graph_t_);
-void optimization_func(sl_graph_t& graph_t_);
+// Eigen::Matrix3d inverse_covariance_func(...);
+Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
