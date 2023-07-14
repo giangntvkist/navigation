@@ -8,6 +8,7 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/MapMetaData.h>
+#include <nav_msgs/Path.h>
 
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
@@ -40,7 +41,6 @@
 using namespace std;
 using namespace Eigen;
 using namespace message_filters;
-typedef Eigen::Triplet<double> T;
 
 /* Define vector have 3 elements x, y, theta */
 struct sl_vector_t {
@@ -101,9 +101,9 @@ string odom_frame;
 bool inverted_laser;
 bool loop_closure_detected;
 
-int max_inter;
-double e_converged;
-double map_update_interval;
+int max_inter = 1e3;
+double e_converged = 1e-3;
+double map_update_interval = 10;
 
 nav_msgs::Odometry odom;
 sensor_msgs::LaserScan laser_scan;
@@ -113,6 +113,10 @@ sl_graph_t graph_t;
 
 double normalize(double z);
 double angle_diff(double a, double b);
+
 // Eigen::Matrix3d inverse_covariance_func(...);
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
 Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+double cost_func(vector<sl_edge_t>& set_edge_t_, Eigen::VectorXd& x);
+void optimization(sl_graph_t& graph_t_);
+void pose_graph_test(sl_graph_t& graph_t_);
