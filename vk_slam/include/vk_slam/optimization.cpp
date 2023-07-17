@@ -1,27 +1,13 @@
 #pragma once
 #include "vk_slam/vk_slam.hpp"
-
-double normalize(double z) {
-    return atan2(sin(z), cos(z));
+Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix) {
+    Eigen::Matrix3d cov, omega;
+    cov << cov_matrix.m[0][0], cov_matrix.m[0][1], cov_matrix.m[0][2],
+        cov_matrix.m[1][0], cov_matrix.m[1][1], cov_matrix.m[1][2],
+        cov_matrix.m[2][0], cov_matrix.m[2][1], cov_matrix.m[2][2];
+    omega = cov.inverse();
+    return omega;
 }
-
-double angle_diff(double a, double b) {
-    double d1, d2;
-    a = normalize(a);
-    b = normalize(b);
-    d1 = a - b;
-    d2 = 2*M_PI - fabs(d1);
-    if(d1 > 0) d2 *= -1.0;
-    if(fabs(d1) < fabs(d2)) {
-        return d1;
-    }else {
-        return d2;
-    }
-}
-
-// Eigen::Matrix3d inverse_covariance_func(...) {
-    
-// }
 
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij) {
     Eigen::Matrix2d R_i;
@@ -99,7 +85,7 @@ double cost_func(vector<sl_edge_t>& set_edge_t, Eigen::VectorXd& x) {
             edge_ij.z.v[1],
             edge_ij.z.v[2];
 
-        // omega_ij = ...
+        // omega_ij = .................................
 
         x_i = x.segment(3*edge_ij.i, 3);
         x_j = x.segment(3*edge_ij.j, 3);
@@ -135,7 +121,7 @@ void optimization(sl_graph_t& graph_t_) {
     double eps = inf;
     cvl_k = inf;
     int num_inter = 0;
-    while(fabs(eps) > e_converged && num_inter < max_inter) {
+    while(fabs(eps) > converged_graph && num_inter < max_inter) {
         b.setZero();
         H.setZero();
         for(int k = 0; k < num_nodes; k++) {
@@ -151,8 +137,7 @@ void optimization(sl_graph_t& graph_t_) {
             int i = edge_ij.i;
             int j = edge_ij.j;
 
-            /* Test omega */
-            omega_ij = 1000*omega_ij.setIdentity();
+            // omega_ij = .....................
 
             x_i = x.segment(3*edge_ij.i, 3);
             x_j = x.segment(3*edge_ij.j, 3);
@@ -229,91 +214,14 @@ void optimization(sl_graph_t& graph_t_) {
         }
     }
     /* H* = H; H*[11] -= I */
+    for(int n = 0; n < 3; n++) {
+        for(int m = 0; m < 3; m++) {
+            H.coeffRef(n, m) -= I(n, m);
+        }
+    }
     for(int k = 0; k < 3*num_nodes; k++) {
         int i = k/3;
         int j = k%3; 
         graph_t.set_node_t[i].pose.v[j] = x(k);
     }
-}
-
-void pose_graph_test(sl_graph_t& graph_t_) {
-    sl_node_t p;
-    p.pose.v[0] = -3.0;
-    p.pose.v[1] = -2.0;
-    p.pose.v[2] = M_PI/2;
-    graph_t_.set_node_t.push_back(p);
-
-    p.pose.v[0] = -3.2;
-    p.pose.v[1] = 0;
-    p.pose.v[2] = 1.75;
-    graph_t_.set_node_t.push_back(p);
-
-    p.pose.v[0] = -2.7;
-    p.pose.v[1] = 1.9;
-    p.pose.v[2] = 0.14;
-    graph_t_.set_node_t.push_back(p);
-
-    p.pose.v[0] = 2.8;
-    p.pose.v[1] = 2.3;
-    p.pose.v[2] = -1.69;
-    graph_t_.set_node_t.push_back(p);
-
-    p.pose.v[0] = 2.5;
-    p.pose.v[1] = -2.1;
-    p.pose.v[2] = -3.05;
-    graph_t_.set_node_t.push_back(p);
-
-    // p.pose.v[0] = -2.7;
-    // p.pose.v[1] = -2.3;
-    // p.pose.v[2] = 1.4;
-    p.pose.v[0] = -2.2;
-    p.pose.v[1] = 0.2;
-    p.pose.v[2] = 1.75;
-    graph_t_.set_node_t.push_back(p);
-
-    sl_edge_t d;
-    d.z.v[0] = 2.0;
-    d.z.v[1] = 0.2;
-    d.z.v[2] = 0.1792;
-    d.i = 0;
-    d.j = 1;
-    graph_t_.set_edge_t.push_back(d);
-
-    d.z.v[0] = 1.7805;
-    d.z.v[1] = -0.8307;
-    d.z.v[2] = -1.6100;
-    d.i = 1;
-    d.j = 2;
-    graph_t_.set_edge_t.push_back(d);
-
-    d.z.v[0] = 5.502;
-    d.z.v[1] = -0.3714;
-    d.z.v[2] = -1.8300;
-    d.i = 2;
-    d.j = 3;
-    graph_t_.set_edge_t.push_back(d);
-
-    d.z.v[0] = 4.4045;
-    d.z.v[1] = 0.2254;
-    d.z.v[2] = -1.3600;
-    d.i = 3;
-    d.j = 4;
-    graph_t_.set_edge_t.push_back(d);
-
-    // d.z.v[0] = 5.1965;
-    // d.z.v[1] = -0.2765;
-    // d.z.v[2] = 4.4500;
-    d.z.v[0] = 4.4699;
-    d.z.v[1] = -2.7202;
-    d.z.v[2] = 4.800;
-    d.i = 4;
-    d.j = 5;
-    graph_t_.set_edge_t.push_back(d);
-
-    d.z.v[0] = 0;
-    d.z.v[1] = 0;
-    d.z.v[2] = 0;
-    d.i = 5;
-    d.j = 1;
-    graph_t_.set_edge_t.push_back(d);
 }

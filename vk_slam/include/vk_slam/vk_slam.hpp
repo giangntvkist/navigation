@@ -69,7 +69,7 @@ struct sl_edge_t {
 	int i;
 	int j;
 	sl_vector_t z;
-	sl_matrix_t inv_cov;
+	sl_matrix_t cov;
 	int idx;
 };
 
@@ -78,6 +78,22 @@ struct sl_graph_t {
 	vector<sl_node_t> set_node_t;
 	vector<sl_edge_t> set_edge_t;
 	double cost_value;
+};
+
+struct correspondence {
+    /** 1 if this correspondence is valid */
+	int valid; 
+	/** Closest point in the other scan. */
+	int j1;
+	/** Second closest point in the other scan. */
+	int j2;
+    /** Squared distance from p(i) to point j1 */
+	double dist2_j1;
+};
+
+struct point2D {
+	sl_vector_t p; // [x y theta]
+	double w; // Weight of point
 };
 
 #define inf 1e4
@@ -98,25 +114,30 @@ string map_frame;
 string base_frame;
 string odom_frame;
 
+bool _data = false;
 bool inverted_laser;
 bool loop_closure_detected;
 
-int max_inter = 1e3;
-double e_converged = 1e-3;
-double map_update_interval = 10;
+int max_inter;
+double converged_graph;
+double map_update_interval;
 
-nav_msgs::Odometry odom;
-sensor_msgs::LaserScan laser_scan;
-nav_msgs::OccupancyGrid occ_map;
+double min_trans, min_rot;
+
+sl_vector_t odom_t, odom_t_1;
+sl_scan_t scan_t;
 
 sl_graph_t graph_t;
 
 double normalize(double z);
 double angle_diff(double a, double b);
 
-// Eigen::Matrix3d inverse_covariance_func(...);
+bool scan_valid(double z);
+void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
+
+
+Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix);
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
 Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
 double cost_func(vector<sl_edge_t>& set_edge_t_, Eigen::VectorXd& x);
 void optimization(sl_graph_t& graph_t_);
-void pose_graph_test(sl_graph_t& graph_t_);
