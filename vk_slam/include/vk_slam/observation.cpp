@@ -20,7 +20,7 @@ double angle_diff(double a, double b) {
 }
 
 bool scan_valid(double z) {
-    return (z < range_max && z >= range_min);
+    return z < range_max && z >= range_min;
 }
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan) {
     scan_t.ranges.clear();
@@ -41,5 +41,5 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     odom_t.v[0] = msg.pose.pose.position.x;
     odom_t.v[1] = msg.pose.pose.position.y;
     odom_t.v[2] = tf::getYaw(msg.pose.pose.orientation);
-    _data = true;
+    data_ = true;
 }

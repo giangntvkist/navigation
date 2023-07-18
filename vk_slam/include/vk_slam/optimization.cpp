@@ -85,7 +85,7 @@ double cost_func(vector<sl_edge_t>& set_edge_t, Eigen::VectorXd& x) {
             edge_ij.z.v[1],
             edge_ij.z.v[2];
 
-        // omega_ij = .................................
+        omega_ij = inverse_covariance_func(edge_ij.cov);
 
         x_i = x.segment(3*edge_ij.i, 3);
         x_j = x.segment(3*edge_ij.j, 3);
@@ -137,7 +137,7 @@ void optimization(sl_graph_t& graph_t_) {
             int i = edge_ij.i;
             int j = edge_ij.j;
 
-            // omega_ij = .....................
+            omega_ij = inverse_covariance_func(edge_ij.cov);
 
             x_i = x.segment(3*edge_ij.i, 3);
             x_j = x.segment(3*edge_ij.j, 3);

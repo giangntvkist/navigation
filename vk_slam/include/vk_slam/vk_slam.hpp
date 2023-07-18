@@ -37,6 +37,7 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Sparse>
+#include <eigen3/Eigen/SVD>
 
 using namespace std;
 using namespace Eigen;
@@ -80,23 +81,14 @@ struct sl_graph_t {
 	double cost_value;
 };
 
-struct correspondence {
-    /** 1 if this correspondence is valid */
-	int valid; 
-	/** Closest point in the other scan. */
-	int j1;
-	/** Second closest point in the other scan. */
-	int j2;
-    /** Squared distance from p(i) to point j1 */
-	double dist2_j1;
-};
+#define occupied 100
+#define free 0
+#define unknown -1
 
-struct point2D {
-	sl_vector_t p; // [x y theta]
-	double w; // Weight of point
-};
-
+#define omni 0
+#define diff 1
 #define inf 1e4
+int model_type; /* Type of model robot: differential or omnidirectional robot */
 
 double range_min;
 double range_max;
@@ -114,7 +106,7 @@ string map_frame;
 string base_frame;
 string odom_frame;
 
-bool _data = false;
+bool data_ = false;
 bool inverted_laser;
 bool loop_closure_detected;
 
@@ -134,6 +126,8 @@ double angle_diff(double a, double b);
 
 bool scan_valid(double z);
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
+bool update_node(sl_vector_t u_t[2]);
+void update_motion(sl_vector_t u_t[2]);
 
 
 Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix);

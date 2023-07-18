@@ -35,11 +35,20 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
     if(!ros::param::get("~map_frame", map_frame)) map_frame = "map";
 
+    Eigen::Matrix3d A;
+    A << 1, 2, 0,
+        2, 5, 1,
+        4, 6, 1;
+    Eigen::Vector2d B;
+    B << 1,
+        3;
+    cout << A.col(1).sum() << " " << A/2 << endl;
+    sl_vector_t u_t[2];
     ros::Rate rate(map_update_interval);
-    while(ros::ok()) {
-        ros::spinOnce();
+    // while(ros::ok()) {
+    //     ros::spinOnce();
         
-        rate.sleep();
-    }
+    //     rate.sleep();
+    // }
     return 0;
 }
