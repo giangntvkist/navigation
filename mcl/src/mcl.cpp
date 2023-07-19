@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~angle_max", angle_max)) angle_max = M_PI/2;
     if(!ros::param::get("~angle_increment", angle_increment)) angle_increment = M_PI/(3*180);
 
-    if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.0;
+    if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.289;
     if(!ros::param::get("~laser_pose_y", laser_pose_y)) laser_pose_y = -0.0;
     if(!ros::param::get("~laser_pose_theta", laser_pose_theta)) laser_pose_theta = 0.0;
 
