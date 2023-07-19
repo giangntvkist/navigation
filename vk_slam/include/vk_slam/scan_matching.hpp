@@ -46,7 +46,7 @@ Eigen::MatrixXd compute_points(sl_node_t& node_i) {
     return pcl;
 }
 
-double norm2(Eigen::Vector3d& p, Eigen::Vector3d& q) {
+double norm2(Eigen::Vector2d& p, Eigen::Vector2d& q) {
     return pow(p(0) - q(0), 2) + pow(p(1) - q(1), 2);
 }
 
@@ -58,14 +58,17 @@ double norm2(Eigen::Vector3d& p, Eigen::Vector3d& q) {
 void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B) {
     int num_pointA = A.cols();
     int num_pointB = B.cols();
-    cores = setZero(4, num_pointB);
-    double d_min;
+    cores.setZero(4, num_pointB);
+    double d_min, d;
     int idx;
+    Eigen::Vector2d p, q;
     for(int i = 0; i < num_pointB; i++) {
         d_min = inf;
         idx = -1;
         for(int j = 0; j < num_pointA; j++) {
-            d = norm2(A.col(i), A,col(j));
+            p = B.col(i);
+            q = A.col(j);
+            d = norm2(p, q);
             if(d < d_min) {
                 d_min = d;
                 idx = j;
@@ -99,9 +102,9 @@ void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::Matr
     }
 }
 /** Compute cross-Covariance matrix H and Mean value */
-void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::Matrix2d& H) {
-    mean_A = setZero(2, 1);
-    mean_B = setZero(2, 1);
+void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::MatrixXd& H) {
+    mean_A.setZero(2, 1);
+    mean_B.setZero(2, 1);
     int num_pairs = cores.cols();
     double sum_weight = 0;
     for(int i = 0; i < num_pairs; i++) {
@@ -115,7 +118,7 @@ void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::Mat
     mean_A = mean_A/sum_weight;
     mean_B = mean_B/sum_weight;
 
-    H = setZero(2, 2);
+    H.setZero(2, 2);
     for(int i = 0; i < num_pairs; i++) {
         int j = cores(1, i);
         if(j != -1) {
@@ -124,49 +127,78 @@ void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::Mat
     }
 }
 
+double error_ICP(Eigen::MatrixXd& cores, Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t) {
+    double e = 0.0;
+    int num_point = pcl_cur.cols();
+    Eigen::Vector2d p;
+    Eigen::Vector2d q;
+    for(int i = 0; i < num_point; i++) {
+        int j = cores(1, i);
+        if(j != -1) {
+            p = R*pcl_cur.col(i) + t;
+            q = pcl_ref.col(cores(1, i));
+            e += norm2(p, q);
+        }
+    }
+    return e;
+}
 /** Vanilla ICP algorithm */
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j) {
-    Eigen::Matrix2d R_i, R_j, R_ji
+    Eigen::Matrix2d R_i, R_j, R_ji;
     Eigen::Vector2d t_i, t_j, t_ji;
     double theta_i, theta_j;
     theta_i = node_i.pose.v[2];
     theta_j = node_j.pose.v[2];
     R_i << cos(theta_i), -sin(theta_i),
         sin(theta_i), cos(theta_i);
+        
     t_i << node_i.pose.v[0],
         node_i.pose.v[1];
 
     R_j << cos(theta_j), -sin(theta_j),
         sin(theta_j), cos(theta_j);
+
     t_j << node_j.pose.v[0],
         node_j.pose.v[1];
 
     R_ji = R_j.transpose()*R_i;
     t_ji = R_j.transpose()*(t_i - t_j);
 
-    int num_inter = 0;
     Eigen::MatrixXd pcl_ref, pcl_cur;
     pcl_ref = compute_points(node_i);
     pcl_cur = compute_points(node_j);
     Eigen::MatrixXd cores, pcl_temp;
     int num_pointcur = pcl_cur.cols();
-
+    pcl_temp.setZero(2, num_pointcur);
     Eigen::Vector2d mean_A;
     Eigen::Vector2d mean_B;
-    Eigen::Matrix2d H;
-    Eigen::Matrix2d U, V;
-    while(num_inter < max_inter) {
-        pcl_temp.setZero(2, num_pointcur);
+    Eigen::MatrixXd H;
+    Eigen::MatrixXd U, V;
+    int num_inter = 0;
+    double e_k, e_k_1, eps;
+    eps = inf;
+    e_k_1 = inf;
+    while(fabs(eps) > converged_graph && num_inter < max_inter) {
         for(int k = 0; k < num_pointcur; k++) {
-            pcl_temp.col(k) = R_ji*pcl_cur(k) + t_ji;
+            pcl_temp.col(k) = R_ji*pcl_cur.col(k) + t_ji;
         }
         get_correspondences(cores, pcl_ref, pcl_temp);
         crossCovariance_Mean(cores, pcl_ref, pcl_cur, mean_A, mean_B, H);
 
-        Eigen::JacobiSVD<Matrix2d> svd( H, ComputeThinU | ComputeThinV);
+        Eigen::JacobiSVD<MatrixXd> svd( H, ComputeThinU | ComputeThinV);
         U = svd.matrixU();
         V = svd.matrixV();
         R_ji = U*V.transpose();
         t_ji = mean_A - R_ji*mean_B;
+        e_k = error_ICP(cores, pcl_ref, pcl_cur, R_ji, t_ji);
+        eps = e_k - e_k_1;
+        e_k_1 = e_k;
+        num_inter += 1;
     }
+    Eigen::Matrix2d R_ij = R_ji.transpose();
+    Eigen::Vector2d t_ij = -R_ji.transpose()*t_ji;
+    double theta_ij = atan2(R_ij(1, 0), R_ij(0, 0));
+    node_j.pose.v[0] = node_i.pose.v[0] + t_ij(0)*cos(node_i.pose.v[2]) - t_ij(1)*sin(node_i.pose.v[2]);
+    node_j.pose.v[1] = node_i.pose.v[1] + t_ij(0)*sin(node_i.pose.v[2]) + t_ij(1)*cos(node_i.pose.v[2]);
+    node_j.pose.v[2] = node_i.pose.v[2] + theta_ij;
 }

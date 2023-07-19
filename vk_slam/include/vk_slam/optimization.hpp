@@ -71,16 +71,16 @@ Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d&
     return J_ij;
 }
 
-double cost_func(vector<sl_edge_t>& set_edge_t, Eigen::VectorXd& x) {
+double cost_func(vector<sl_edge_t>& edge_t, Eigen::VectorXd& x) {
     sl_edge_t edge_ij;
     Eigen::Vector3d x_i, x_j, z_ij;
     Eigen::Vector3d e_ij;
     Eigen::Matrix3d omega_ij;
 
-    int num_edges = set_edge_t.size();
+    int num_edges = edge_t.size();
     double cost_value = 0;
     for(int k = 0; k < num_edges; k++) {
-        edge_ij = set_edge_t[k];
+        edge_ij = edge_t[k];
         z_ij << edge_ij.z.v[0],
             edge_ij.z.v[1],
             edge_ij.z.v[2];
@@ -222,6 +222,6 @@ void optimization(sl_graph_t& graph_t_) {
     for(int k = 0; k < 3*num_nodes; k++) {
         int i = k/3;
         int j = k%3; 
-        graph_t.set_node_t[i].pose.v[j] = x(k);
+        graph_t_.set_node_t[i].pose.v[j] = x(k);
     }
 }
