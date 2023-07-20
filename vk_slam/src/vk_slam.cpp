@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.289;
     if(!ros::param::get("~laser_pose_y", laser_pose_y)) laser_pose_y = -0.0;
     if(!ros::param::get("~laser_pose_theta", laser_pose_theta)) laser_pose_theta = 0.0;
-    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 18;
+    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 5;
     if(!ros::param::get("~inverted_laser", inverted_laser)) inverted_laser = true;
 
     if(!ros::param::get("~init_pose_x", init_pose_x)) init_pose_x = 0.0;
@@ -36,15 +36,15 @@ int main(int argc, char **argv) {
 
     if(!ros::param::get("~max_inter", max_inter)) max_inter = 100;
     if(!ros::param::get("~converged_graph", converged_graph)) converged_graph = 1e-3;
-    if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 20;
+    if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 10;
 
-    if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.5;
-    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.5;
-    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 0.3;
+    if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.2;
+    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.2;
+    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 1.0;
 
-    if(!ros::param::get("~map_width", map_width)) map_width = 200;
-    if(!ros::param::get("~map_height", map_height)) map_height = 200;
-    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.05;
+    if(!ros::param::get("~map_width", map_width)) map_width = 500;
+    if(!ros::param::get("~map_height", map_height)) map_height = 500;
+    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.02;
 
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
     if(!ros::param::get("~map_frame", map_frame)) map_frame = "vk_map";

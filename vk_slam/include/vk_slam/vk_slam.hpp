@@ -151,6 +151,7 @@ Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d&
 double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
 void optimization(sl_graph_t& graph_t_);
 
+void compute_logmap(int idx_x1, int idx_y1, int idx_x2, int idx_y2, nav_msgs::OccupancyGrid& map_t, double range_i, vector<double>& log_map_t);
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
 void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
