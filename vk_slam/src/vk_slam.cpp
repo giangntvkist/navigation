@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.289;
     if(!ros::param::get("~laser_pose_y", laser_pose_y)) laser_pose_y = -0.0;
     if(!ros::param::get("~laser_pose_theta", laser_pose_theta)) laser_pose_theta = 0.0;
-    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 5;
+    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 2;
     if(!ros::param::get("~inverted_laser", inverted_laser)) inverted_laser = true;
 
     if(!ros::param::get("~init_pose_x", init_pose_x)) init_pose_x = 0.0;
@@ -40,14 +40,19 @@ int main(int argc, char **argv) {
 
     if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.2;
     if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.2;
-    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 1.0;
+    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 0.5;
+
+    if(!ros::param::get("~delta_x", delta_x)) delta_x = 0.02;
+    if(!ros::param::get("~delta_y", delta_y)) delta_y = 0.02;
+    if(!ros::param::get("~delta_theta", delta_theta)) delta_theta = 0.01;
+    if(!ros::param::get("~sigma", sigma)) sigma = 1.0;
 
     if(!ros::param::get("~map_width", map_width)) map_width = 500;
     if(!ros::param::get("~map_height", map_height)) map_height = 500;
-    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.02;
+    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.05;
 
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
-    if(!ros::param::get("~map_frame", map_frame)) map_frame = "vk_map";
+    if(!ros::param::get("~map_frame", map_frame)) map_frame = "map";
 
     nav_msgs::OccupancyGrid map;
     vector<double> log_map_t_;
@@ -58,8 +63,9 @@ int main(int argc, char **argv) {
     sl_vector_t u_t[2];
     sl_vector_t u_t_[2];
     sl_node_t node_current;
+    sl_edge_t edge_current;
     sl_vector_t pose_robot_t;
-    int num_nodes = 0;
+    int num_nodes;
 
     init_slam(log_map_t_, map, pose_graph);
     ros::Time T1, T2;
@@ -78,7 +84,6 @@ int main(int argc, char **argv) {
                 node_current.pose = pose_robot_t;
                 node_current.scan = scan_t;
                 graph_t.set_node_t.push_back(node_current);
-                num_nodes += 1;
 
                 odom_t_1 = odom_t;
                 u_t[0] = odom_t;
@@ -92,8 +97,9 @@ int main(int argc, char **argv) {
                 node_current.pose = pose_robot_t;
                 node_current.scan = scan_t;
                 graph_t.set_node_t.push_back(node_current);
-                num_nodes += 1;
-                vanilla_ICP(graph_t.set_node_t[num_nodes-2], graph_t.set_node_t[num_nodes-1]);
+                num_nodes = graph_t.set_node_t.size();
+                vanilla_ICP(graph_t.set_node_t[num_nodes-2], graph_t.set_node_t[num_nodes-1], edge_current);
+                graph_t.set_edge_t.push_back(edge_current);
                 u_t[0] = odom_t;
             }
             mapping(graph_t, log_map_t_, map, pose_graph);

@@ -1,11 +1,10 @@
 #pragma once
 #include "vk_slam/vk_slam.hpp"
-Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix) {
-    Eigen::Matrix3d cov, omega;
-    cov << cov_matrix.m[0][0], cov_matrix.m[0][1], cov_matrix.m[0][2],
-        cov_matrix.m[1][0], cov_matrix.m[1][1], cov_matrix.m[1][2],
-        cov_matrix.m[2][0], cov_matrix.m[2][1], cov_matrix.m[2][2];
-    omega = cov.inverse();
+Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& inv_cov_matrix) {
+    Eigen::Matrix3d omega;
+    omega << inv_cov_matrix.m[0][0], inv_cov_matrix.m[0][1], inv_cov_matrix.m[0][2],
+        inv_cov_matrix.m[1][0], inv_cov_matrix.m[1][1], inv_cov_matrix.m[1][2],
+        inv_cov_matrix.m[2][0], inv_cov_matrix.m[2][1], inv_cov_matrix.m[2][2];
     return omega;
 }
 
@@ -85,7 +84,9 @@ double cost_func(vector<sl_edge_t>& edge_t, Eigen::VectorXd& x) {
             edge_ij.z.v[1],
             edge_ij.z.v[2];
 
-        omega_ij = inverse_covariance_func(edge_ij.cov);
+        omega_ij << edge_ij.inv_cov.m[0][0], edge_ij.inv_cov.m[0][1], edge_ij.inv_cov.m[0][2],
+            edge_ij.inv_cov.m[1][0], edge_ij.inv_cov.m[1][1], edge_ij.inv_cov.m[1][2],
+            edge_ij.inv_cov.m[2][0], edge_ij.inv_cov.m[2][1], edge_ij.inv_cov.m[2][2];
 
         x_i = x.segment(3*edge_ij.i, 3);
         x_j = x.segment(3*edge_ij.j, 3);
@@ -108,6 +109,7 @@ void optimization(sl_graph_t& graph_t_) {
     sl_node_t node_i, node_j;
     sl_edge_t edge_ij;
 
+    bool failed;
     Eigen::Matrix3d tmp_ij;
     Eigen::Matrix3d I;
     I.setIdentity();
@@ -137,7 +139,9 @@ void optimization(sl_graph_t& graph_t_) {
             int i = edge_ij.i;
             int j = edge_ij.j;
 
-            omega_ij = inverse_covariance_func(edge_ij.cov);
+            omega_ij << edge_ij.inv_cov.m[0][0], edge_ij.inv_cov.m[0][1], edge_ij.inv_cov.m[0][2],
+                edge_ij.inv_cov.m[1][0], edge_ij.inv_cov.m[1][1], edge_ij.inv_cov.m[1][2],
+                edge_ij.inv_cov.m[2][0], edge_ij.inv_cov.m[2][1], edge_ij.inv_cov.m[2][2];
 
             x_i = x.segment(3*edge_ij.i, 3);
             x_j = x.segment(3*edge_ij.j, 3);
@@ -201,11 +205,13 @@ void optimization(sl_graph_t& graph_t_) {
         Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> chol(H); // Performs a Cholesky factorization of matrix H
         if (chol.info() != Success) {
             ROS_ERROR("Decomposition failed!");
+            failed = true;
             break;
         }else {
             delta_x = chol.solve(-b);
             if (chol.info() != Success) {
                 ROS_ERROR("Solver failed!");
+                failed = true;
                 break;
             }else {
                 x += delta_x;
@@ -219,9 +225,11 @@ void optimization(sl_graph_t& graph_t_) {
             H.coeffRef(n, m) -= I(n, m);
         }
     }
-    for(int k = 0; k < 3*num_nodes; k++) {
-        int i = k/3;
-        int j = k%3; 
-        graph_t_.set_node_t[i].pose.v[j] = x(k);
+    if(!failed) {
+        for(int k = 0; k < 3*num_nodes; k++) {
+            int i = k/3;
+            int j = k%3; 
+            graph_t_.set_node_t[i].pose.v[j] = x(k);
+        }
     }
 }

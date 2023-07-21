@@ -27,235 +27,112 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     data_ = true;
 }
 
-/** Occupancy grid map - using Bresenham's Line Drawing Algorithm 
-    - Define for cell value: -1: un-known
-                            0: free
-                            100: occupied */
-void compute_logmap(int idx_x1, int idx_y1, int idx_x2, int idx_y2, nav_msgs::OccupancyGrid& map_t, double range_i, vector<double>& log_map_t) {
-    int idx_cell = (idx_y2 - 1)*map_t.info.width + idx_x2 - 1;
-    int l_inv;
-    double d = map_t.info.resolution*sqrt(pow(idx_x1 - idx_x2, 2) + pow(idx_y1 - idx_y2, 2));
-    if (d > min(range_max, range_i + map_t.info.resolution/2)) {
-        l_inv = l_0;
-    } else if (range_i < range_max && fabs(d - range_i) < map_t.info.resolution/2) {
-        l_inv = l_occ;
-    } else if (d <= range_i) {
-        l_inv = l_free;
-    }
-    log_map_t[idx_cell] += l_inv - l_0;
-}
-
+/** Occupancy grid map - using Bresenham's Line Drawing Algorithm
+    -1: un-known    0: free     100: occupied */
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t) {
     /** Lidar pose in map frame */
-    double x, y;
+    double x, y, x_cell, y_cell;
     x = node_i.pose.v[0] + laser_pose_x*cos(node_i.pose.v[2]) - laser_pose_y*sin(node_i.pose.v[2]);
     y = node_i.pose.v[1] + laser_pose_x*sin(node_i.pose.v[2]) + laser_pose_y*cos(node_i.pose.v[2]);
 
+    double d, anpha, l_inv;
+    int idx_cell;
+
+    int map_width, map_height;
     int num_beam = node_i.scan.ranges.size();
     double x_offset, y_offset, map_resolution;
     x_offset = map_t.info.origin.position.x;
     y_offset = map_t.info.origin.position.y;
     map_resolution = map_t.info.resolution;
-
-    int map_width, map_height;
     map_width = map_t.info.width;
+    map_height = map_t.info.height;
 
-    int idx_x1, idx_y1;
-    int idx_x2, idx_y2;
-    int idx_x, idx_y, P;
-    int del_x, del_y;
-    double d, anpha;
-
-    idx_x1 = (x - x_offset)/map_resolution + 1;
-    idx_y1 = (y - y_offset)/map_resolution + 1;
+    int del_x, del_y, e;
+    int id_x1, id_x2, id_y1, id_y2, id_x, id_y;
+    int x_step, y_step, p1, p2;
+    id_x1 = (x - x_offset)/map_resolution + 1;
+    id_y1 = (y - y_offset)/map_resolution + 1;
     for(int k = 0; k < num_beam; k ++) {
         anpha = node_i.scan.ranges[k].v[1] + node_i.pose.v[2] + laser_pose_theta;
-        idx_x2 = (x + node_i.scan.ranges[k].v[0]*cos(anpha) - x_offset)/map_resolution + 1;
-        idx_y2 = (y + node_i.scan.ranges[k].v[0]*sin(anpha) - y_offset)/map_resolution + 1;
-        if (idx_x1 < idx_x2 && idx_y1 < idx_y2) {                               /** (1) */
-            idx_x = idx_x1; idx_y = idx_y1;
-            del_x = idx_x2 - idx_x1; del_y = idx_y2 - idx_y1;
-            if(abs(del_x) == abs(del_y)) {
-                while (idx_x <= idx_x2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    idx_x++;
-                    idx_y++;
-                }
-            }else if(abs(del_x) > abs(del_y)) {
-                P = 2*del_y - del_x;
-                while (idx_x <= idx_x2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P += 2*del_y;
-                    } else {
-                        P += 2*del_y - 2*del_x;
-                        idx_y++;
-                    }
-                    idx_x++;
-                }
-            }else {
-                P = 2*del_x - del_y;
-                while (idx_y <= idx_y2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P += 2*del_x;
-                    } else {
-                        P += 2*del_x - 2*del_y;
-                        idx_x++;
-                    }
-                    idx_y++;
-                }
-            }
+        id_x2 = (x + node_i.scan.ranges[k].v[0]*cos(anpha) - x_offset)/map_resolution + 1;
+        id_y2 = (y + node_i.scan.ranges[k].v[0]*sin(anpha) - y_offset)/map_resolution + 1;
 
-        }else if (idx_x1 > idx_x2 && idx_y1 < idx_y2) {                     /** (2) */
-            idx_x = idx_x1; idx_y = idx_y1;
-            del_x = idx_x2 - idx_x1;
-            del_y = idx_y2 - idx_y1;
-            if(abs(del_x) == abs(del_y)) {
-                while (idx_x >= idx_x2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    idx_x--;
-                    idx_y++;
+        del_x = id_x2 - id_x1;
+	    del_y = id_y2 - id_y1;
+	    if (del_x < 0) del_x = -del_x;
+	    if (del_y < 0) del_y = -del_y;
+	    x_step = 1;
+	    if (id_x2 < id_x1) x_step = -1;
+	    y_step = 1;
+	    if (id_y2 < id_y1) y_step = -1;
+	    id_x = id_x1; id_y = id_y1;
+        if (del_x > del_y) {
+		    e = 2*del_y - del_x;
+		    p1 = 2*(del_y - del_x);
+		    p2 = 2*del_y;
+		    for(int i = 0; i < del_x; i++) {
+			    if(e >= 0) {
+				    id_y += y_step;
+				    e += p1;
+			    } else {
+				    e += p2;
                 }
-            } else if (abs(del_x) > abs(del_y)) {
-                P = -2*del_y - del_x;
-                while (idx_x >= idx_x2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P > 0) {
-                        P = P - 2*del_y;
-                    } else {
-                        P = P - 2*del_y - 2*del_x;
-                        idx_y++;
-                    }
-                    idx_x--;
+			    id_x += x_step;
+			    idx_cell = (id_y - 1)*map_width + id_x - 1;
+                x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
+                y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
+                d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
+                if (d > min(range_max, node_i.scan.ranges[k].v[0] + map_resolution/2)) {
+                    l_inv = l_0;
+                } else if (node_i.scan.ranges[k].v[0] < range_max && fabs(d - node_i.scan.ranges[k].v[0]) < map_resolution/2) {
+                    l_inv = l_occ;
+                } else if (d <= node_i.scan.ranges[k].v[0]) {
+                    l_inv = l_free;
                 }
-            } else if (abs(del_x) < abs(del_y)) {
-                P = -2*del_x - del_y;
-                while (idx_y <= idx_y2) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P = P - 2*del_x;
-                    } else {
-                        P = P - 2*del_x - 2*del_y;
-                        idx_x--;
-                    }
-                    idx_y++;
+                if(idx_cell < map_t.data.size()) {
+                    log_map_t[idx_cell] += l_inv - l_0;
+                }else {
+                    ROS_WARN("Overload map size!");
                 }
-            }  
-        }else if (idx_x1 == idx_x2 && idx_y1 < idx_y2) {                    /** (3) */
-            idx_x = idx_x1;
-            idx_y = idx_y1;
-            while (idx_y <= idx_y2) {
-                compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                idx_y++;
-            }
-        }else if (idx_x1 < idx_x2 && idx_y1 > idx_y2) {                     /** (4) */
-            idx_x = idx_x2;
-            idx_y = idx_y2;
-            del_x = idx_x1 - idx_x2;
-            del_y = idx_y1 - idx_y2;
-            if (abs(del_x) == abs(del_y)) {
-                while (idx_x >= idx_x1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    idx_x--;
-                    idx_y++;
+		    }
+	    } else {
+		    e = 2*del_x - del_y;
+		    p1 = 2*(del_x - del_y);
+		    p2 = 2*del_x;
+		    for(int i = 0; i < del_y; i++) {
+			    if (e >= 0) {
+				    id_x += x_step;
+				    e += p1;
+			    } else {
+				    e += p2;
                 }
-            } else if (abs(del_x) > abs(del_y)) {
-                P = -2*del_y - del_x;
-                while (idx_x >= idx_x1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P > 0) {
-                        P = P - 2*del_y;
-                    } else {
-                        P = P - 2*del_y - 2*del_x;
-                        idx_y++;
-                    }
-                    idx_x--;
+			    id_y += y_step;
+			    idx_cell = (id_y - 1)*map_width + id_x - 1;
+                x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
+                y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
+                d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
+                if (d > min(range_max, node_i.scan.ranges[k].v[0] + map_resolution/2)) {
+                    l_inv = l_0;
+                } else if (node_i.scan.ranges[k].v[0] < range_max && fabs(d - node_i.scan.ranges[k].v[0]) < map_resolution/2) {
+                    l_inv = l_occ;
+                } else if (d <= node_i.scan.ranges[k].v[0]) {
+                    l_inv = l_free;
                 }
-            } else if (abs(del_x) < abs(del_y)) {
-                P = -2*del_x - del_y;
-                while (idx_y <= idx_y1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P = P - 2*del_x;
-                    } else {
-                        P = P - 2*del_x - 2*del_y;
-                        idx_x--;
-                    }
-                    idx_y++;
+                if(idx_cell < map_t.data.size()) {
+                    log_map_t[idx_cell] += l_inv - l_0;
+                }else {
+                    ROS_WARN("Overload map size!");
                 }
-            }
-        }else if (idx_x1 == idx_x2 && idx_y1 > idx_y2) {                    /** (5) */
-            idx_x = idx_x1;
-            idx_y = idx_y1;
-            while (idx_y >= idx_y2) {
-                compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                idx_y--;
-            }
-        }else if (idx_x1 > idx_x2 && idx_y1 > idx_y2) {                     /** (6) */
-            idx_x = idx_x2;
-            idx_y = idx_y2;
-            del_x = idx_x1 - idx_x2;
-            del_y = idx_y1 - idx_y2;
-            if (abs(del_x) == abs(del_y)) {
-                while (idx_x <= idx_x1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    idx_x++;
-                    idx_y++;
-                }
-            } else if (abs(del_x) > abs(del_y)) {
-                P = 2*del_y - del_x;
-                while (idx_x <= idx_x1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P += 2*del_y;
-                    } else {
-                        P += 2*del_y - 2*del_x;
-                        idx_y++;
-                    }
-                    idx_x++;
-                }
-            } else {
-                P = 2*del_x - del_y;
-                while (idx_y <= idx_y1) {
-                    compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                    if (P < 0) {
-                        P += 2*del_x;
-                    } else {
-                        P += 2*del_x - 2*del_y;
-                        idx_x++;
-                    }
-                    idx_y++;
-                }
-            }
-        }else if (idx_x1 < idx_x2 && idx_y1 == idx_y2) {                    /** (7) */
-            idx_x = idx_x1;
-            idx_y = idx_y1;
-            while(idx_x <= idx_x2) {
-                compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                idx_x++;
-            }
-        }else if (idx_x1 == idx_x2 && idx_y1 == idx_y2) {                   /** (8) */
-            idx_x = idx_x1;
-            idx_y = idx_y1;
-            compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-        }else { /** idx_x1 > idx_x2 && idx_y1 == idx_y2 */                  /** (9) */
-            idx_x = idx_x1;
-            idx_y = idx_y1;
-            while (idx_x >= idx_x2) {
-                compute_logmap(idx_x1, idx_y1, idx_x, idx_y, map_t, node_i.scan.ranges[k].v[0], log_map_t);
-                idx_x--;
-            }
-        }
+		    }
+	    }
     }
-
 }
 
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t) {
     int num_nodes = graph_t_.set_node_t.size();
-    // for(int i = 0; i < num_nodes; i++) {
+    for(int i = 0; i < num_nodes; i++) {
         ray_tracing(graph_t_.set_node_t.back(), map_t, log_map_t);
-    // }
+    }
     int num_cells = map_t.data.size();
     for(int i = 0; i < num_cells; i++) {
         if (exp(log_map_t[i]) <= 0.333) {

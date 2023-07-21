@@ -62,7 +62,7 @@ struct sl_scan_t {
 struct sl_node_t {
 	sl_vector_t pose;
 	sl_scan_t scan;
-	int idx;
+    int idx;
 };
 
 /* Define edge */
@@ -70,15 +70,13 @@ struct sl_edge_t {
 	int i;
 	int j;
 	sl_vector_t z;
-	sl_matrix_t cov;
-	int idx;
+	sl_matrix_t inv_cov;
 };
 
 /* Define graph */
 struct sl_graph_t {
 	vector<sl_node_t> set_node_t;
 	vector<sl_edge_t> set_edge_t;
-	double cost_value;
 };
 
 #define occupied 100
@@ -122,11 +120,14 @@ bool loop_closure_detected;
 int max_inter;
 double converged_graph;
 double map_update_interval;
+double sigma;
 
 double min_trans, min_rot;
 int map_width, map_height;
 double map_resolution;
 double dist_threshold;
+
+double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
 
 ros::Publisher map_pub, pose_graph_pub;
 
@@ -143,7 +144,9 @@ double norm2(Eigen::Vector2d& p, Eigen::Vector2d& q);
 void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B);
 void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::MatrixXd& H);
 double error_ICP(Eigen::MatrixXd& cores, Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t);
+double error_ICP_plus(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t);
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j);
+void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t, sl_matrix_t& inv_cov_matrix);
 
 Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix);
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
@@ -151,7 +154,6 @@ Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d&
 double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
 void optimization(sl_graph_t& graph_t_);
 
-void compute_logmap(int idx_x1, int idx_y1, int idx_x2, int idx_y2, nav_msgs::OccupancyGrid& map_t, double range_i, vector<double>& log_map_t);
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
 void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);

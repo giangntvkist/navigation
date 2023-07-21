@@ -142,10 +142,33 @@ double error_ICP(Eigen::MatrixXd& cores, Eigen::MatrixXd& pcl_ref, Eigen::Matrix
     }
     return e;
 }
+
+double error_ICP_plus(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t) {
+    double e = 0.0;
+    int num_point = pcl_cur.cols();
+    Eigen::MatrixXd pcl_temp;
+    pcl_temp.setZero(2, num_point);
+    for(int k = 0; k < num_point; k++) {
+        pcl_temp.col(k) = R*pcl_cur.col(k) + t;
+    }
+    Eigen::MatrixXd cores;
+    get_correspondences(cores, pcl_ref, pcl_temp);
+    Eigen::Vector2d p, q;
+    for(int i = 0; i < num_point; i++) {
+        int j = cores(1, i);
+        if(j != -1) {
+            p = pcl_temp.col(i);
+            q = pcl_ref.col(cores(1, i));
+            e += norm2(p, q);
+        }
+    }
+    return e;
+}
+
 /** Vanilla ICP algorithm */
-void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j) {
-    Eigen::Matrix2d R_i, R_j, R_ji;
-    Eigen::Vector2d t_i, t_j, t_ji;
+void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
+    Eigen::Matrix2d R_i, R_j, R_ij;
+    Eigen::Vector2d t_i, t_j, t_ij;
     double theta_i, theta_j;
     theta_i = node_i.pose.v[2];
     theta_j = node_j.pose.v[2];
@@ -161,8 +184,8 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j) {
     t_j << node_j.pose.v[0],
         node_j.pose.v[1];
 
-    R_ji = R_j.transpose()*R_i;
-    t_ji = R_j.transpose()*(t_i - t_j);
+    R_ij = R_i.transpose()*R_j;
+    t_ij = R_i.transpose()*(t_j - t_i);
 
     Eigen::MatrixXd pcl_ref, pcl_cur;
     pcl_ref = compute_points(node_i);
@@ -180,7 +203,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j) {
     e_k_1 = inf;
     while(fabs(eps) > converged_graph && num_inter < max_inter) {
         for(int k = 0; k < num_pointcur; k++) {
-            pcl_temp.col(k) = R_ji*pcl_cur.col(k) + t_ji;
+            pcl_temp.col(k) = R_ij*pcl_cur.col(k) + t_ij;
         }
         get_correspondences(cores, pcl_ref, pcl_temp);
         crossCovariance_Mean(cores, pcl_ref, pcl_cur, mean_A, mean_B, H);
@@ -188,17 +211,114 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j) {
         Eigen::JacobiSVD<MatrixXd> svd( H, ComputeThinU | ComputeThinV);
         U = svd.matrixU();
         V = svd.matrixV();
-        R_ji = U*V.transpose();
-        t_ji = mean_A - R_ji*mean_B;
-        e_k = error_ICP(cores, pcl_ref, pcl_cur, R_ji, t_ji);
+        R_ij = U*V.transpose();
+        t_ij = mean_A - R_ij*mean_B;
+        e_k = error_ICP(cores, pcl_ref, pcl_cur, R_ij, t_ij);
         eps = e_k - e_k_1;
         e_k_1 = e_k;
         num_inter += 1;
     }
-    Eigen::Matrix2d R_ij = R_ji.transpose();
-    Eigen::Vector2d t_ij = -R_ji.transpose()*t_ji;
+    /** Update node j*/
+    t_j = R_i*t_ij + t_i;
     double theta_ij = atan2(R_ij(1, 0), R_ij(0, 0));
-    node_j.pose.v[0] = node_i.pose.v[0] + t_ij(0)*cos(node_i.pose.v[2]) - t_ij(1)*sin(node_i.pose.v[2]);
-    node_j.pose.v[1] = node_i.pose.v[1] + t_ij(0)*sin(node_i.pose.v[2]) + t_ij(1)*cos(node_i.pose.v[2]);
-    node_j.pose.v[2] = node_i.pose.v[2] + theta_ij;
+    node_j.pose.v[0] = t_j(0);
+    node_j.pose.v[1] = t_j(1);
+    node_j.pose.v[2] = theta_ij + theta_i;
+
+    /** Add new constraint node i to node j*/
+    edge_ij.i = node_i.idx;
+    edge_ij.j = node_i.idx;
+    edge_ij.z.v[0] = t_ij(0);
+    edge_ij.z.v[1] = t_ij(1);
+    edge_ij.z.v[2] = theta_ij;
+
+    inv_covariance_ICP(pcl_ref, pcl_cur, R_ij, t_ij, edge_ij.inv_cov);
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) {
+            edge_ij.inv_cov.m[0][0] *= 2*pow(sigma, -2);
+        }
+    }
+}
+
+/** Inverse Covariance vanilla ICP cov(R-t) */
+void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t, sl_matrix_t& inv_cov_matrix) {
+    double theta = atan2(R(1, 0), R(0, 0));
+    Eigen::Matrix2d R_plus, R_diff;
+    Eigen::Vector2d t_plus, t_diff;
+    double J_plus, J, J_diff;
+    J = error_ICP_plus(pcl_ref, pcl_cur, R, t);
+    /* H_00 */
+    t_plus << t(0) + 2*delta_x,
+        t(1);
+    t_diff << t(0) - 2*delta_x,
+        t(1);
+
+    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R, t_plus);
+    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R, t_diff);
+    inv_cov_matrix.m[0][0] = (J_plus - 2*J + J_diff)/(4*delta_x*delta_x);
+    /* H_11 */
+    t_plus(0) = t(0); t_plus(1) = t(1) + 2*delta_y;
+    t_diff(0) = t(0); t_diff(1) = t(1) - 2*delta_y;
+
+    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R, t_plus);
+    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R, t_diff);
+    inv_cov_matrix.m[1][1] = (J_plus - 2*J + J_diff)/(4*delta_y*delta_y);
+
+    /* H_22*/
+    R_plus << cos(theta + 2*delta_theta), -sin(theta + 2*delta_theta),
+        sin(theta + 2*delta_theta), cos(theta + 2*delta_theta);
+    R_diff << cos(theta - 2*delta_theta), -sin(theta - 2*delta_theta),
+        sin(theta - 2*delta_theta), cos(theta - 2*delta_theta);
+
+    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t);
+    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t);
+    inv_cov_matrix.m[2][2] = (J_plus - 2*J + J_diff)/(4*delta_theta*delta_theta);
+
+    Eigen::Vector2d t1, t2, t3, t4;
+    /* H_xy = H_yx */
+    t1 << t(0) + delta_x,
+        t(1) + delta_y;
+    t2 << t(0) - delta_x,
+        t(1) + delta_y;
+    t3 << t(0) + delta_x,
+        t(1) - delta_y;
+    t4 << t(0) - delta_x,
+        t(1) - delta_y;
+    double J1, J2, J3, J4;
+    J1 = error_ICP_plus(pcl_ref, pcl_cur, R, t1);
+    J2 = error_ICP_plus(pcl_ref, pcl_cur, R, t2);
+    J3 = error_ICP_plus(pcl_ref, pcl_cur, R, t3);
+    J4 = error_ICP_plus(pcl_ref, pcl_cur, R, t4);
+    inv_cov_matrix.m[0][1] = (J1 - J2 - J3 + J4)/(4*delta_x*delta_y);
+    inv_cov_matrix.m[1][0] = inv_cov_matrix.m[0][1];
+
+    /* H_xtheta = H_theta */
+    t_plus << t(0) + delta_x,
+        t(1);
+    R_plus << cos(theta + delta_theta), -sin(theta + delta_theta),
+        sin(theta + delta_theta), cos(theta + delta_theta);
+    
+    t_diff << t(0) - delta_x,
+        t(1);
+    R_diff << cos(theta - delta_theta), -sin(theta - delta_theta),
+        sin(theta - delta_theta), cos(theta - delta_theta);
+    J1 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_plus);
+    J2 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_diff);
+    J3 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_plus);
+    J4 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_diff);
+    inv_cov_matrix.m[0][2] = (J1 - J2 - J3 + J4)/(4*delta_x*delta_theta);
+    inv_cov_matrix.m[2][0] = inv_cov_matrix.m[0][2];
+
+    /* H_ytheta = H_thetay */
+    t_plus << t(0),
+        t(1) + delta_y;
+    t_diff << t(0),
+        t(1) - delta_y;
+    
+    J1 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_plus);
+    J2 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_diff);
+    J3 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_plus);
+    J4 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_diff);
+    inv_cov_matrix.m[1][2] = (J1 - J2 - J3 + J4)/(4*delta_y*delta_theta);
+    inv_cov_matrix.m[2][1] = inv_cov_matrix.m[1][2];
 }
