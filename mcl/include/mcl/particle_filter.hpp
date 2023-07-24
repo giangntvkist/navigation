@@ -164,7 +164,7 @@ double computeEntropy() {
 }
 
 bool update_filter(pf_vector_t u_t[2]) {
-    return sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) > min_trans || angle_diff(u_t[1].v[2], u_t[0].v[2]) > min_rot;
+    return fabs(sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2))) > min_trans || fabs(angle_diff(u_t[1].v[2], u_t[0].v[2])) > min_rot;
 }
 
 void update_motion(pf_vector_t u_t[2]) {
