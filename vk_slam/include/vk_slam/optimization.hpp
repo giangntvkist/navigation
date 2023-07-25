@@ -1,12 +1,5 @@
 #pragma once
 #include "vk_slam/vk_slam.hpp"
-Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& inv_cov_matrix) {
-    Eigen::Matrix3d omega;
-    omega << inv_cov_matrix.m[0][0], inv_cov_matrix.m[0][1], inv_cov_matrix.m[0][2],
-        inv_cov_matrix.m[1][0], inv_cov_matrix.m[1][1], inv_cov_matrix.m[1][2],
-        inv_cov_matrix.m[2][0], inv_cov_matrix.m[2][1], inv_cov_matrix.m[2][2];
-    return omega;
-}
 
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij) {
     Eigen::Matrix2d R_i;
@@ -143,6 +136,10 @@ void optimization(sl_graph_t& graph_t_) {
                 edge_ij.inv_cov.m[1][0], edge_ij.inv_cov.m[1][1], edge_ij.inv_cov.m[1][2],
                 edge_ij.inv_cov.m[2][0], edge_ij.inv_cov.m[2][1], edge_ij.inv_cov.m[2][2];
 
+            omega_ij << 100, 0, 0,
+                0, 100, 0,
+                0, 0, 100;
+
             x_i = x.segment(3*edge_ij.i, 3);
             x_j = x.segment(3*edge_ij.j, 3);
 
@@ -230,6 +227,111 @@ void optimization(sl_graph_t& graph_t_) {
             int i = k/3;
             int j = k%3; 
             graph_t_.set_node_t[i].pose.v[j] = x(k);
+        }
+    }
+}
+
+void cov_func(sl_graph_t& graph_t_) {
+    int num_nodes = graph_t_.set_node_t.size();
+    int num_edges = graph_t_.set_edge_t.size();
+    Eigen::VectorXd x(3*num_nodes);
+    Eigen::SparseMatrix<double> H(3*num_nodes, 3*num_nodes);
+    Eigen::SparseMatrix<double> H_red(3*(num_nodes -1), 3*(num_nodes - 1));
+
+    Eigen::Matrix3d A_ij, B_ij, omega_ij;
+    Eigen::Matrix<double, 3, 6> J_ij;
+    Eigen::Vector3d x_i, x_j, z_ij;
+    sl_node_t node_i, node_j;
+    sl_edge_t edge_ij;
+    Eigen::Matrix3d tmp_ij;
+    Eigen::MatrixXd I(3*(num_nodes -1), 3*(num_nodes - 1));
+    I.setIdentity();
+    /* Initial guess x[] */
+    for(int k = 0; k < 3*num_nodes; k++) {
+        int i = k/3; // node i_th
+        int j = k%3; // j = 0 -> x, j = 1 -> y, j = 2 -> theta
+        x(k) = graph_t_.set_node_t[i].pose.v[j];
+    }
+    H.setZero();
+    H_red.setZero();
+    for(int k = 0; k < num_nodes; k++) {
+        x(3*k+2) = normalize(x(3*k+2));
+    }
+    for(int k = 0; k < num_edges; k++) {
+        /* Edge ij from node i to node j*/
+        edge_ij = graph_t_.set_edge_t[k];
+        z_ij << edge_ij.z.v[0],
+            edge_ij.z.v[1],
+            edge_ij.z.v[2];
+        int i = edge_ij.i;
+        int j = edge_ij.j;
+
+        omega_ij << edge_ij.inv_cov.m[0][0], edge_ij.inv_cov.m[0][1], edge_ij.inv_cov.m[0][2],
+            edge_ij.inv_cov.m[1][0], edge_ij.inv_cov.m[1][1], edge_ij.inv_cov.m[1][2],
+            edge_ij.inv_cov.m[2][0], edge_ij.inv_cov.m[2][1], edge_ij.inv_cov.m[2][2];
+        
+        x_i = x.segment(3*edge_ij.i, 3);
+        x_j = x.segment(3*edge_ij.j, 3);
+
+        J_ij = jacobian_func(x_i, x_j, z_ij);
+        A_ij = J_ij.leftCols(3);
+        B_ij = J_ij.rightCols(3);
+
+        /* Compute H[ii] += A_ij^T*omega_ij*A_ij */
+        tmp_ij = A_ij.transpose()*omega_ij*A_ij;
+        for(int n = 3*i; n < 3*i+3; n++) {
+            for(int m = 3*i; m < 3*i+3; m++) {
+                H.coeffRef(n, m) += tmp_ij(n%3, m%3);
+            }
+        }
+
+        /* Compute H[ij] += A_ij^T*omega_ij*B_ij */
+        tmp_ij = A_ij.transpose()*omega_ij*B_ij;
+        for(int n = 3*i; n < 3*i+3; n++) {
+            for(int m = 3*j; m < 3*j+3; m++) {
+                H.coeffRef(n, m) += tmp_ij(n%3, m%3);
+            }
+        }
+            
+        /* Compute H[ji] += B_ij^T*omega_ij*A_ij */
+        tmp_ij = B_ij.transpose()*omega_ij*A_ij;
+        for(int n = 3*j; n < 3*j+3; n++) {
+            for(int m = 3*i; m < 3*i+3; m++) {
+                H.coeffRef(n, m) += tmp_ij(n%3, m%3);
+            }
+        }
+            
+        /* Compute H[jj] += B_ij^T*omega_ij*B_ij */
+        tmp_ij = B_ij.transpose()*omega_ij*B_ij;
+        for(int n = 3*j; n < 3*j+3; n++) {
+            for(int m = 3*j; m < 3*j+3; m++) {
+                H.coeffRef(n, m) += tmp_ij(n%3, m%3);
+            }
+        }
+    }
+    H.makeCompressed();
+    for(int i = 0; i < 3*(num_nodes - 1); i++) {
+        for(int j = 0; j < 3*(num_nodes - 1); j++) {
+            H_red.coeffRef(i, j) = H.coeffRef(i, j);
+        }
+    }
+    H_red.makeCompressed();
+    Eigen::MatrixXd H_red_inv;
+    Eigen::Matrix3d H_ii;
+    sl_matrix_t inv_cov_ii;
+    Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> chol(H_red);
+    if(chol.info()!= Success) {
+        ROS_INFO("H reduce inverse fail!");
+    }else {
+        H_red_inv = chol.solve(I);
+        for(int i = 0; i < num_nodes - 1; i++) {
+            H_ii = (H_red_inv.block(3*i, 3*i, 3, 3)).inverse();
+            for(int j = 0; j < 3; j++) {
+                for(int k = 0; k < 3; k++) {
+                    inv_cov_ii.m[j][k] = H_ii(j, k);
+                }
+            }
+            graph_t_.set_node_t[i].inv_cov = inv_cov_ii;
         }
     }
 }

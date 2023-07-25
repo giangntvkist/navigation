@@ -38,6 +38,8 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Sparse>
 #include <eigen3/Eigen/SVD>
+#include <eigen3/Eigen/SparseCholesky>
+#include <eigen3/Eigen/SparseQR>
 
 using namespace std;
 using namespace Eigen;
@@ -63,6 +65,7 @@ struct sl_node_t {
 	sl_vector_t pose;
 	sl_scan_t scan;
     int idx;
+    sl_matrix_t inv_cov;
 };
 
 /* Define edge */
@@ -116,16 +119,21 @@ bool data_ = false;
 bool first_time = true;
 bool inverted_laser;
 bool loop_closure_detected;
+bool max_inter_ICP;
 
 int max_inter;
 double converged_graph;
 double map_update_interval;
 double sigma;
+double loop_kernel_size;
 
 double min_trans, min_rot;
 int map_width, map_height;
 double map_resolution;
 double dist_threshold;
+double min_cumulative_distance;
+double e_threshold;
+bool scan_matching_success;
 
 double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
 
@@ -148,7 +156,6 @@ double error_ICP_plus(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen:
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j);
 void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t, sl_matrix_t& inv_cov_matrix);
 
-Eigen::Matrix3d inverse_covariance_func(sl_matrix_t& cov_matrix);
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
 Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
 double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);

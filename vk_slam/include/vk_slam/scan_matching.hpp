@@ -1,36 +1,6 @@
 #pragma once
 #include "vk_slam/vk_slam.hpp"
 
-bool update_node(sl_vector_t u_t[2]) {
-    return sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) > min_trans || angle_diff(u_t[1].v[2], u_t[0].v[2]) > min_rot;
-}
-
-void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t) {
-    if(model_type == omni) {
-        double delta_trans, delta_rot, delta_bearing;
-        delta_trans = sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-        delta_rot = angle_diff(u_t[1].v[2], u_t[0].v[2]);
-        delta_bearing = angle_diff(atan2(u_t[1].v[1] - u_t[0].v[1], u_t[1].v[0] - u_t[0].v[0]), u_t[0].v[2]) + q_t.v[2];
-        /* Update current robot pose */
-        q_t.v[0] += delta_trans*cos(delta_bearing);
-        q_t.v[1] += delta_trans*sin(delta_bearing);
-        q_t.v[2] = normalize(q_t.v[2] + delta_rot);
-    }else if(model_type == diff) {
-        double delta_trans, delta_rot1, delta_rot2;
-        if(sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) < 0.01) {
-            delta_rot1 = 0.0;
-        }else {
-            delta_rot1 = angle_diff(atan2(u_t[1].v[1] - u_t[0].v[1], u_t[1].v[0] - u_t[0].v[0]), u_t[0].v[2]);
-        }
-        delta_trans = sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-        delta_rot2 = angle_diff(angle_diff(u_t[1].v[2], u_t[0].v[2]), delta_rot1);
-        /* Update current robot pose */
-        q_t.v[0] += delta_trans*cos(q_t.v[2] + delta_rot1);
-        q_t.v[1] += delta_trans*sin(q_t.v[2] + delta_rot1);
-        q_t.v[2] = normalize(q_t.v[2] + delta_rot1 + delta_rot2);
-    }
-}
-
 /** Pointcould in frame node i */
 Eigen::MatrixXd compute_points(sl_node_t& node_i) {
     int num_points = node_i.scan.ranges.size();
@@ -101,6 +71,7 @@ void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::Matr
         }
     }
 }
+
 /** Compute cross-Covariance matrix H and Mean value */
 void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::MatrixXd& H) {
     mean_A.setZero(2, 1);
@@ -218,6 +189,18 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
         e_k_1 = e_k;
         num_inter += 1;
     }
+    if(num_inter == max_inter) {
+        ROS_WARN("ICP don't coverge!");
+        max_inter_ICP = true;
+        R_ij = R_i.transpose()*R_j;
+        t_ij = R_i.transpose()*(t_j - t_i);
+    }else {
+        max_inter_ICP = false;
+        if(e_k <= e_threshold) {
+        	scan_matching_success = true;
+    	}
+    	cout << " Error: " << e_k << endl;
+    }
     /** Update node j*/
     t_j = R_i*t_ij + t_i;
     double theta_ij = atan2(R_ij(1, 0), R_ij(0, 0));
@@ -227,7 +210,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
 
     /** Add new constraint node i to node j*/
     edge_ij.i = node_i.idx;
-    edge_ij.j = node_i.idx;
+    edge_ij.j = node_j.idx;
     edge_ij.z.v[0] = t_ij(0);
     edge_ij.z.v[1] = t_ij(1);
     edge_ij.z.v[2] = theta_ij;
@@ -235,7 +218,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
     inv_covariance_ICP(pcl_ref, pcl_cur, R_ij, t_ij, edge_ij.inv_cov);
     for(int i = 0; i < 3; i++) {
         for(int j = 0; j < 3; j++) {
-            edge_ij.inv_cov.m[0][0] *= 2*pow(sigma, -2);
+            edge_ij.inv_cov.m[i][j] *= 2*pow(sigma, -2);
         }
     }
 }
@@ -256,6 +239,7 @@ void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eige
     J_plus = error_ICP_plus(pcl_ref, pcl_cur, R, t_plus);
     J_diff = error_ICP_plus(pcl_ref, pcl_cur, R, t_diff);
     inv_cov_matrix.m[0][0] = (J_plus - 2*J + J_diff)/(4*delta_x*delta_x);
+    
     /* H_11 */
     t_plus(0) = t(0); t_plus(1) = t(1) + 2*delta_y;
     t_diff(0) = t(0); t_diff(1) = t(1) - 2*delta_y;
@@ -321,4 +305,47 @@ void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eige
     J4 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_diff);
     inv_cov_matrix.m[1][2] = (J1 - J2 - J3 + J4)/(4*delta_y*delta_theta);
     inv_cov_matrix.m[2][1] = inv_cov_matrix.m[1][2];
+}
+
+/** Compute mahalanobis distance*/
+double mahalanobis_distance(sl_node_t& node_t, sl_node_t& node_i) {
+    Eigen::Matrix3d omega;
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) {
+            omega(i, j) = node_i.inv_cov.m[i][j];
+        }
+    }
+    Eigen::Vector3d x, muy;
+    x << node_t.pose.v[0],
+        node_t.pose.v[1],
+        node_t.pose.v[2];
+
+    muy << node_i.pose.v[0],
+        node_i.pose.v[1],
+        node_i.pose.v[2];
+    return sqrt((x - muy).transpose()*omega*(x - muy));
+}
+
+/** Detect loop-closure*/
+void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {
+    if(cumulative_distance > min_cumulative_distance) {
+        ROS_INFO("Detecting loop clousre...");
+        int num_nodes = graph_t_.set_node_t.size();
+        sl_node_t node_t = graph_t_.set_node_t.back();
+        sl_edge_t edge_ij;
+        double d;
+        cov_func(graph_t_);
+        for(int i = 0; i < num_nodes-1; i++) {
+            d = mahalanobis_distance(node_t, graph_t_.set_node_t[i]);
+            if(d <= 3) {
+                scan_matching_success = false;
+                vanilla_ICP(graph_t_.set_node_t[i], node_t, edge_ij);
+                if(scan_matching_success) {
+                    loop_closure_detected = true;
+                    ROS_INFO("Loop closure detected! %d - %d",node_t.idx, i);
+                    graph_t_.set_edge_t.push_back(edge_ij);
+                }
+            }
+        }
+    }
 }

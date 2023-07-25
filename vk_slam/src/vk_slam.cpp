@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.289;
     if(!ros::param::get("~laser_pose_y", laser_pose_y)) laser_pose_y = -0.0;
     if(!ros::param::get("~laser_pose_theta", laser_pose_theta)) laser_pose_theta = 0.0;
-    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 2;
+    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 3;
     if(!ros::param::get("~inverted_laser", inverted_laser)) inverted_laser = true;
 
     if(!ros::param::get("~init_pose_x", init_pose_x)) init_pose_x = 0.0;
@@ -38,22 +38,25 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~converged_graph", converged_graph)) converged_graph = 1e-3;
     if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 10;
 
-    if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.2;
-    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.2;
+    if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.3;
+    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.5;
     if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 0.5;
 
     if(!ros::param::get("~delta_x", delta_x)) delta_x = 0.02;
     if(!ros::param::get("~delta_y", delta_y)) delta_y = 0.02;
     if(!ros::param::get("~delta_theta", delta_theta)) delta_theta = 0.01;
     if(!ros::param::get("~sigma", sigma)) sigma = 1.0;
+    if(!ros::param::get("~min_cumulative_distance", min_cumulative_distance)) min_cumulative_distance = 5.0;
+    if(!ros::param::get("~e_threshold", e_threshold)) e_threshold = 0.02;
+    if(!ros::param::get("~loop_kernel_size", loop_kernel_size)) loop_kernel_size = 1.0;
 
-    if(!ros::param::get("~map_width", map_width)) map_width = 500;
-    if(!ros::param::get("~map_height", map_height)) map_height = 500;
+    if(!ros::param::get("~map_width", map_width)) map_width = 1000;
+    if(!ros::param::get("~map_height", map_height)) map_height = 1000;
     if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.05;
 
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
     if(!ros::param::get("~map_frame", map_frame)) map_frame = "map";
-
+    
     nav_msgs::OccupancyGrid map;
     vector<double> log_map_t_;
     nav_msgs::Path pose_graph;
@@ -65,10 +68,11 @@ int main(int argc, char **argv) {
     sl_node_t node_current;
     sl_edge_t edge_current;
     sl_vector_t pose_robot_t;
-    int num_nodes;
+    int idx_node;
+    double cum_dist = 0;
 
     init_slam(log_map_t_, map, pose_graph);
-    ros::Time T1, T2;
+    ros::Time T1, T2, T3, T4, T5, T6, T7, T8;
     ros::Rate rate(map_update_interval);
     while(ros::ok()) {
         ros::spinOnce();
@@ -83,6 +87,8 @@ int main(int argc, char **argv) {
 
                 node_current.pose = pose_robot_t;
                 node_current.scan = scan_t;
+                idx_node = 0;
+                node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
 
                 odom_t_1 = odom_t;
@@ -96,10 +102,21 @@ int main(int argc, char **argv) {
             if(update_node(u_t)) {
                 node_current.pose = pose_robot_t;
                 node_current.scan = scan_t;
+                idx_node += 1;
+                node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
-                num_nodes = graph_t.set_node_t.size();
-                vanilla_ICP(graph_t.set_node_t[num_nodes-2], graph_t.set_node_t[num_nodes-1], edge_current);
+
+                vanilla_ICP(graph_t.set_node_t[idx_node - 1], graph_t.set_node_t[idx_node], edge_current);
                 graph_t.set_edge_t.push_back(edge_current);
+
+                /** Check loop closure*/
+                cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
+                loop_closure_detected = false;
+                detect_loop_closure(cum_dist, graph_t);
+                if(loop_closure_detected) {
+                    ROS_INFO("Optimizing...");
+                    optimization(graph_t);
+                }
                 u_t[0] = odom_t;
             }
             mapping(graph_t, log_map_t_, map, pose_graph);

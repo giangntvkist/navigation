@@ -130,10 +130,17 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
 
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t) {
     int num_nodes = graph_t_.set_node_t.size();
-    for(int i = 0; i < num_nodes; i++) {
+    int num_cells = map_t.data.size();
+    if(loop_closure_detected) {
+        for (int i = 0; i < num_cells; i++) {
+            log_map_t[i] = l_0;
+        }
+        for(int i = 0; i < num_nodes; i++) {
+            ray_tracing(graph_t_.set_node_t[i], map_t, log_map_t);
+        }
+    }else {
         ray_tracing(graph_t_.set_node_t.back(), map_t, log_map_t);
     }
-    int num_cells = map_t.data.size();
     for(int i = 0; i < num_cells; i++) {
         if (exp(log_map_t[i]) <= 0.333) {
             map_t.data[i] = free;
@@ -173,5 +180,35 @@ void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_ms
     log_map_t.clear();
     for (int i = 0; i < num_cells; i++) {
         log_map_t.push_back(l_0);
+    }
+}
+
+bool update_node(sl_vector_t u_t[2]) {
+    return sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) > min_trans || fabs(angle_diff(u_t[1].v[2], u_t[0].v[2])) > min_rot;
+}
+
+void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t) {
+    if(model_type == omni) {
+        double delta_trans, delta_rot, delta_bearing;
+        delta_trans = sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
+        delta_rot = angle_diff(u_t[1].v[2], u_t[0].v[2]);
+        delta_bearing = angle_diff(atan2(u_t[1].v[1] - u_t[0].v[1], u_t[1].v[0] - u_t[0].v[0]), u_t[0].v[2]) + q_t.v[2];
+        /* Update current robot pose */
+        q_t.v[0] += delta_trans*cos(delta_bearing);
+        q_t.v[1] += delta_trans*sin(delta_bearing);
+        q_t.v[2] = normalize(q_t.v[2] + delta_rot);
+    }else if(model_type == diff) {
+        double delta_trans, delta_rot1, delta_rot2;
+        if(sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) < 0.01) {
+            delta_rot1 = 0.0;
+        }else {
+            delta_rot1 = angle_diff(atan2(u_t[1].v[1] - u_t[0].v[1], u_t[1].v[0] - u_t[0].v[0]), u_t[0].v[2]);
+        }
+        delta_trans = sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
+        delta_rot2 = angle_diff(angle_diff(u_t[1].v[2], u_t[0].v[2]), delta_rot1);
+        /* Update current robot pose */
+        q_t.v[0] += delta_trans*cos(q_t.v[2] + delta_rot1);
+        q_t.v[1] += delta_trans*sin(q_t.v[2] + delta_rot1);
+        q_t.v[2] = normalize(q_t.v[2] + delta_rot1 + delta_rot2);
     }
 }
