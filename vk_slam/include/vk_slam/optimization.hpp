@@ -1,6 +1,19 @@
 #pragma once
 #include "vk_slam/vk_slam.hpp"
 
+
+void error_func(sl_vector_t& x_i, sl_vector_t& x_j, sl_vector_t& z_ij, sl_vector_t& e_ij) {
+    e_ij.v[2] = angle_diff(x_j.v[2], x_i.v[2]) - z_ij.v[2];
+    double u[2]; /* t_j - t_i */
+    u[0] = x_j.v[0] - x_i.v[0];
+    u[1] = x_j.v[1] - x_i.v[1];
+
+    double temp[2]; /* R_i^T * (t_j - t_i) - t_ij */
+    temp[0] = u[0]*cos(x_i.v[2]) + u[1]*sin(x_i.v[2]) - z_ij.v[0];
+    temp[1] = -u[0]*sin(x_i.v[2]) + u[1]*cos(x_i.v[2]) - z_ij.v[1];
+
+    e_ij.v[0] =
+}
 Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij) {
     Eigen::Matrix2d R_i;
     Eigen::Matrix2d R_j;
@@ -136,9 +149,9 @@ void optimization(sl_graph_t& graph_t_) {
                 edge_ij.inv_cov.m[1][0], edge_ij.inv_cov.m[1][1], edge_ij.inv_cov.m[1][2],
                 edge_ij.inv_cov.m[2][0], edge_ij.inv_cov.m[2][1], edge_ij.inv_cov.m[2][2];
 
-            omega_ij << 100, 0, 0,
-                0, 100, 0,
-                0, 0, 100;
+            omega_ij << 1000, 0, 0,
+                0, 1000, 0,
+                0, 0, 1;
 
             x_i = x.segment(3*edge_ij.i, 3);
             x_j = x.segment(3*edge_ij.j, 3);
@@ -229,6 +242,7 @@ void optimization(sl_graph_t& graph_t_) {
             graph_t_.set_node_t[i].pose.v[j] = x(k);
         }
     }
+    cout << " x " << x << endl;
 }
 
 void cov_func(sl_graph_t& graph_t_) {

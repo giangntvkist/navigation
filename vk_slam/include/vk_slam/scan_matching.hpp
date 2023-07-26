@@ -2,69 +2,78 @@
 #include "vk_slam/vk_slam.hpp"
 
 /** Pointcould in frame node i */
-Eigen::MatrixXd compute_points(sl_node_t& node_i) {
+void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur) {
     int num_points = node_i.scan.ranges.size();
-    Eigen::MatrixXd pcl(2, num_points);
-    pcl.setZero();
     double r, beam_angle;
+    sl_vector_t p;
+    pcl_cur.pcl.clear();
     for(int k = 0; k < num_points; k++) {
         r = node_i.scan.ranges[k].v[0];
         beam_angle = node_i.scan.ranges[k].v[1] + laser_pose_theta;
-        pcl(0, k) = laser_pose_x + r*cos(beam_angle);
-        pcl(1, k) = laser_pose_y + r*sin(beam_angle);
+        p.v[0] = laser_pose_x + r*cos(beam_angle);
+        p.v[1] = laser_pose_y + r*sin(beam_angle);
+        p.v[2] = beam_angle;
+        pcl_cur.pcl.push_back(p);
     }
-    return pcl;
 }
 
-double norm2(Eigen::Vector2d& p, Eigen::Vector2d& q) {
-    return pow(p(0) - q(0), 2) + pow(p(1) - q(1), 2);
+void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans) {
+    int num_point = pcl_cur.pcl.size();
+    sl_vector_t p, p_w;
+    pcl_cur_w.pcl.clear();
+    for(int i = 0; i < num_point; i++) {
+        p = pcl_cur.pcl[i];
+        p_w.v[0] = p.v[0]*cos(trans.v[2]) - p.v[1]*sin(trans.v[2]) + trans.v[0];
+        p_w.v[1] = p.v[0]*sin(trans.v[2]) + p.v[1]*cos(trans.v[2]) + trans.v[1];
+        p_w.v[2] = p.v[2] + trans.v[2];
+        pcl_cur_w.pcl.push_back(p_w);
+    }
 }
 
-/** Get correspondences refscan: A & curscan: B
-    - Matrix A: 2xN, N is number of points reference scan
-    - Matrix B: 2xM, M is number of points current scan
-    - Matrix cores: 4xM, cores(0, i): index of point ith B, cores(1, i): index of point jth A which point is closest with point ith
-    cores(2, i): distance minimum between point ith(B) and jth(A), cores(3, i): weight of pair ij */
-void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B) {
-    int num_pointA = A.cols();
-    int num_pointB = B.cols();
-    cores.setZero(4, num_pointB);
+void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores) {
+    int num_point_ref = pcl_ref.pcl.size();
+    int num_point_cur = pcl_cur_w.pcl.size();
     double d_min, d;
     int idx;
-    Eigen::Vector2d p, q;
-    for(int i = 0; i < num_pointB; i++) {
+    sl_vector_t p, q;
+    sl_corr_t w;
+    cores.clear();
+    cores.resize(num_point_cur);
+    for(int i = 0; i < num_point_cur; i++) {
         d_min = inf;
         idx = -1;
-        for(int j = 0; j < num_pointA; j++) {
-            p = B.col(i);
-            q = A.col(j);
-            d = norm2(p, q);
+        p = pcl_cur_w.pcl[i];
+        for(int j = 0; j < num_point_ref; j++) {
+            q = pcl_ref.pcl[j];
+            d = pow(p.v[0] - q.v[0], 2) + pow(p.v[1] - q.v[1], 2);
             if(d < d_min) {
                 d_min = d;
                 idx = j;
             }
         }
         if(d_min < dist_threshold) {
-            cores(0, i) = i;
-            cores(1, i) = idx;
-            cores(2, i) = d_min;
-            cores(3, i) = 1;
+            w.valid = 1;
+            w.j1 = idx;
+            w.dist2_j1 = d_min;
+            w.weight = 1;
         }else {
-            /** Reject oulier larger distance threshold */
-            cores(0, i) = i;
-            cores(1, i) = -1;
-            cores(2, i) = d_min;
-            cores(3, i) = 1;
+            w.valid = -1;
+            w.j1 = idx;
+            w.dist2_j1 = d_min;
+            w.weight = 0;
         }
+        cores[i] = w;
     }
-    for(int i = 0; i < num_pointB; i++) {
-        for(int j = 0; j < num_pointB; j++) {
-            if(i != j && cores(1, i) != -1) {
-                if(cores(1, i) == cores(1, j)) {
-                    if(cores(2, i) <= cores(2, j)) {
-                        cores(1, j) = -1;
-                    }else {
-                        cores(1, i) = -1;
+    for(int i = 0; i < num_point_cur; i++) {
+        if(cores[i].valid == 1) {
+            for(int j = 0; j < num_point_cur; j++) {
+                if(j != i) {
+                    if(cores[j].j1 == cores[i].j1) {
+                        if(cores[j].dist2_j1 > cores[i].dist2_j1) {
+                            cores[j].valid = -1;
+                        }else {
+                            cores[i].valid = -1;
+                        }
                     }
                 }
             }
@@ -72,150 +81,135 @@ void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::Matr
     }
 }
 
-/** Compute cross-Covariance matrix H and Mean value */
-void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::MatrixXd& H) {
-    mean_A.setZero(2, 1);
-    mean_B.setZero(2, 1);
-    int num_pairs = cores.cols();
+void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores,
+    sl_vector_t& mean_ref, sl_vector_t& mean_cur_w, double (&H)[2][2]) {
+    int num_pairs = cores.size();
     double sum_weight = 0;
+    int j;
+    mean_ref.v[0] = 0;
+    mean_ref.v[1] = 0;
     for(int i = 0; i < num_pairs; i++) {
-        int j = cores(1, i);
-        if(j != -1) {
-            mean_A += cores(3, i)*A.col(j);
-            mean_B += cores(3, i)*B.col(i);
-            sum_weight += cores(3, i);
+        if(cores[i].valid == 1) {
+            j = cores[i].j1;
+            mean_ref.v[0] += cores[i].weight*pcl_ref.pcl[j].v[0];
+            mean_ref.v[1] += cores[i].weight*pcl_ref.pcl[j].v[1];
+
+            mean_cur_w.v[0] += cores[i].weight*pcl_cur_w.pcl[i].v[0];
+            mean_cur_w.v[1] += cores[i].weight*pcl_cur_w.pcl[i].v[1];
+            sum_weight += cores[i].weight;
         }
     }
-    mean_A = mean_A/sum_weight;
-    mean_B = mean_B/sum_weight;
+    mean_ref.v[0] = mean_ref.v[0]/sum_weight;
+    mean_ref.v[1] = mean_ref.v[1]/sum_weight;
 
-    H.setZero(2, 2);
+    mean_cur_w.v[0] = mean_cur_w.v[0]/sum_weight;
+    mean_cur_w.v[1] = mean_cur_w.v[1]/sum_weight;
+    for(int i = 0; i < 2; i++) {
+        for(int j = 0; j < 2; j++) {
+            H[i][j] = 0;
+        }
+    }
     for(int i = 0; i < num_pairs; i++) {
-        int j = cores(1, i);
-        if(j != -1) {
-            H += (A.col(j) - mean_A)*(B.col(i) - mean_B).transpose()*cores(3, i);
+        if(cores[i].valid == 1) {
+            j = cores[i].j1;
+            H[0][0] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur_w.pcl[i].v[0] - mean_cur_w.v[0])*cores[i].weight;
+            H[0][1] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur_w.pcl[i].v[1] - mean_cur_w.v[1])*cores[i].weight;
+
+            H[1][0] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur_w.pcl[i].v[0] - mean_cur_w.v[0])*cores[i].weight;
+            H[1][1] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur_w.pcl[i].v[1] - mean_cur_w.v[1])*cores[i].weight;
         }
     }
+
 }
 
-double error_ICP(Eigen::MatrixXd& cores, Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t) {
-    double e = 0.0;
-    int num_point = pcl_cur.cols();
-    Eigen::Vector2d p;
-    Eigen::Vector2d q;
+double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores) {
+    double sum_e = 0;
+    int num_point = pcl_cur_w.pcl.size();
+    int j;
     for(int i = 0; i < num_point; i++) {
-        int j = cores(1, i);
-        if(j != -1) {
-            p = R*pcl_cur.col(i) + t;
-            q = pcl_ref.col(cores(1, i));
-            e += norm2(p, q);
+        if(cores[i].valid == 1) {
+            j = cores[i].j1;
+            sum_e += pow(pcl_ref.pcl[j].v[0] - pcl_cur_w.pcl[i].v[0], 2) + pow(pcl_ref.pcl[j].v[1] - pcl_cur_w.pcl[i].v[1], 2);
         }
     }
-    return e;
+    return sum_e;
 }
 
-double error_ICP_plus(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t) {
-    double e = 0.0;
-    int num_point = pcl_cur.cols();
-    Eigen::MatrixXd pcl_temp;
-    pcl_temp.setZero(2, num_point);
-    for(int k = 0; k < num_point; k++) {
-        pcl_temp.col(k) = R*pcl_cur.col(k) + t;
-    }
-    Eigen::MatrixXd cores;
-    get_correspondences(cores, pcl_ref, pcl_temp);
-    Eigen::Vector2d p, q;
-    for(int i = 0; i < num_point; i++) {
-        int j = cores(1, i);
-        if(j != -1) {
-            p = pcl_temp.col(i);
-            q = pcl_ref.col(cores(1, i));
-            e += norm2(p, q);
+void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_vector_t& trans) {
+    Eigen::Matrix2d R_ij;
+    Eigen::Vector2d t_ij;
+
+    R_ij.setZero();
+    R_ij(0, 0) = cos(node_i.pose.v[2])*cos(node_j.pose.v[2]) + sin(node_i.pose.v[2])*sin(node_j.pose.v[2]);
+    R_ij(0, 1) = -cos(node_i.pose.v[2])*sin(node_j.pose.v[2]) + sin(node_i.pose.v[2])*cos(node_j.pose.v[2]);
+    R_ij(1, 0) = -sin(node_i.pose.v[2])*cos(node_j.pose.v[2]) + cos(node_i.pose.v[2])*sin(node_j.pose.v[2]);
+    R_ij(1, 1) = sin(node_i.pose.v[2])*sin(node_j.pose.v[2]) + cos(node_i.pose.v[2])*cos(node_j.pose.v[2]);
+
+    sl_point_cloud_t pcl_ref, pcl_cur;
+    compute_points(node_i, pcl_ref);
+    compute_points(node_j, pcl_cur);
+    int num_point = pcl_cur.pcl.size();
+    sl_vector_t mean_ref, mean_cur_w;
+
+    trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
+    trans.v[1] = -sin(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + cos(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
+    trans.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
+    // trans.v[2] = atan2(R_ij(1, 0), R_ij(0, 0));
+
+    sl_point_cloud_t pcl_cur_w;
+    vector<sl_corr_t> cores;
+    Eigen::MatrixXd U, V, H_matrix;
+    H_matrix.setZero(2, 2);
+
+    double H[2][2];
+    int count = 0;
+    double sum_e_k, sum_e_k_1, theta_ij, eps;
+    sum_e_k_1 = inf;
+    while(count < max_inter_ICP && (fabs(eps) > converged_ICP)) {
+        transform_pcl(pcl_cur, pcl_cur_w, trans);
+        get_correspondences(pcl_ref, pcl_cur_w, cores);
+        compute_cov_mean_ICP(pcl_ref, pcl_cur_w, cores, mean_ref, mean_cur_w, H);
+        for(int i = 0; i < 2; i++) {
+            for(int j = 0; j < 2; j++) {
+                H_matrix(i, j) = H[i][j];
+            }
         }
-    }
-    return e;
-}
-
-/** Vanilla ICP algorithm */
-void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
-    Eigen::Matrix2d R_i, R_j, R_ij;
-    Eigen::Vector2d t_i, t_j, t_ij;
-    double theta_i, theta_j;
-    theta_i = node_i.pose.v[2];
-    theta_j = node_j.pose.v[2];
-    R_i << cos(theta_i), -sin(theta_i),
-        sin(theta_i), cos(theta_i);
-        
-    t_i << node_i.pose.v[0],
-        node_i.pose.v[1];
-
-    R_j << cos(theta_j), -sin(theta_j),
-        sin(theta_j), cos(theta_j);
-
-    t_j << node_j.pose.v[0],
-        node_j.pose.v[1];
-
-    R_ij = R_i.transpose()*R_j;
-    t_ij = R_i.transpose()*(t_j - t_i);
-
-    Eigen::MatrixXd pcl_ref, pcl_cur;
-    pcl_ref = compute_points(node_i);
-    pcl_cur = compute_points(node_j);
-    Eigen::MatrixXd cores, pcl_temp;
-    int num_pointcur = pcl_cur.cols();
-    pcl_temp.setZero(2, num_pointcur);
-    Eigen::Vector2d mean_A;
-    Eigen::Vector2d mean_B;
-    Eigen::MatrixXd H;
-    Eigen::MatrixXd U, V;
-    int num_inter = 0;
-    double e_k, e_k_1, eps;
-    eps = inf;
-    e_k_1 = inf;
-    while(fabs(eps) > converged_graph && num_inter < max_inter) {
-        for(int k = 0; k < num_pointcur; k++) {
-            pcl_temp.col(k) = R_ij*pcl_cur.col(k) + t_ij;
-        }
-        get_correspondences(cores, pcl_ref, pcl_temp);
-        crossCovariance_Mean(cores, pcl_ref, pcl_cur, mean_A, mean_B, H);
-
-        Eigen::JacobiSVD<MatrixXd> svd( H, ComputeThinU | ComputeThinV);
+        Eigen::JacobiSVD<MatrixXd> svd( H_matrix, ComputeThinU | ComputeThinV);
         U = svd.matrixU();
         V = svd.matrixV();
         R_ij = U*V.transpose();
-        t_ij = mean_A - R_ij*mean_B;
-        e_k = error_ICP(cores, pcl_ref, pcl_cur, R_ij, t_ij);
-        eps = e_k - e_k_1;
-        e_k_1 = e_k;
-        num_inter += 1;
-    }
-    if(num_inter == max_inter) {
-        ROS_WARN("ICP don't coverge!");
-        max_inter_ICP = true;
-        R_ij = R_i.transpose()*R_j;
-        t_ij = R_i.transpose()*(t_j - t_i);
-    }else {
-        max_inter_ICP = false;
-        if(e_k <= e_threshold) {
-        	scan_matching_success = true;
-    	}
-    	cout << " Error: " << e_k << endl;
-    }
-    /** Update node j*/
-    t_j = R_i*t_ij + t_i;
-    double theta_ij = atan2(R_ij(1, 0), R_ij(0, 0));
-    node_j.pose.v[0] = t_j(0);
-    node_j.pose.v[1] = t_j(1);
-    node_j.pose.v[2] = theta_ij + theta_i;
 
-    /** Add new constraint node i to node j*/
+        trans.v[2] = atan2(R_ij(1, 0), R_ij(0, 0));
+        trans.v[0] = mean_ref.v[0] - (mean_cur_w.v[0]*cos(trans.v[2]) - mean_cur_w.v[1]*sin(trans.v[2]));
+        trans.v[1] = mean_ref.v[1] - (mean_cur_w.v[0]*sin(trans.v[2]) + mean_cur_w.v[1]*cos(trans.v[2]));
+        sum_e_k = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores);
+        eps = sum_e_k - sum_e_k_1;
+        sum_e_k_1 = sum_e_k;
+        count += 1;
+    }
+    if(count == max_inter_ICP) {
+        ROS_WARN("Scan matching failed!");
+        scan_matching_success = false;
+        trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
+        trans.v[1] = -sin(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + cos(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
+        trans.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
+    }else {
+        scan_matching_success = true;
+        node_j.pose.v[0] = trans.v[0]*cos(trans.v[2]) - trans.v[1]*sin(trans.v[2]) + node_i.pose.v[0];
+        node_j.pose.v[1] = trans.v[0]*sin(trans.v[2]) + trans.v[1]*cos(trans.v[2]) + node_i.pose.v[1];
+        node_j.pose.v[2] = trans.v[2] + node_i.pose.v[2];
+        if(sum_e_k < e_threshold) {
+            overlap_best = true;
+        }else {
+            overlap_best = false;
+        }
+    }
     edge_ij.i = node_i.idx;
     edge_ij.j = node_j.idx;
-    edge_ij.z.v[0] = t_ij(0);
-    edge_ij.z.v[1] = t_ij(1);
-    edge_ij.z.v[2] = theta_ij;
-
-    inv_covariance_ICP(pcl_ref, pcl_cur, R_ij, t_ij, edge_ij.inv_cov);
+    edge_ij.z.v[0] = trans.v[0];
+    edge_ij.z.v[1] = trans.v[1];
+    edge_ij.z.v[2] = trans.v[2];
+    inverse_cov_ICP(pcl_ref, pcl_cur, trans, edge_ij.inv_cov);
     for(int i = 0; i < 3; i++) {
         for(int j = 0; j < 3; j++) {
             edge_ij.inv_cov.m[i][j] *= 2*pow(sigma, -2);
@@ -223,129 +217,112 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
     }
 }
 
-/** Inverse Covariance vanilla ICP cov(R-t) */
-void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t, sl_matrix_t& inv_cov_matrix) {
-    double theta = atan2(R(1, 0), R(0, 0));
-    Eigen::Matrix2d R_plus, R_diff;
-    Eigen::Vector2d t_plus, t_diff;
-    double J_plus, J, J_diff;
-    J = error_ICP_plus(pcl_ref, pcl_cur, R, t);
-    /* H_00 */
-    t_plus << t(0) + 2*delta_x,
-        t(1);
-    t_diff << t(0) - 2*delta_x,
-        t(1);
+double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans) {
+    sl_point_cloud_t pcl_cur_w_;
+    vector<sl_corr_t> cores_;
+    transform_pcl(pcl_cur, pcl_cur_w_, trans);
+    get_correspondences(pcl_ref, pcl_cur_w_, cores_);
+    return compute_sum_error_ICP(pcl_ref, pcl_cur_w_, cores_);
+}
 
-    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R, t_plus);
-    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R, t_diff);
+void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix) {
+    double J_plus, J_diff, J;
+    double J1, J2, J3, J4;
+    /* H_xx */
+    J = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans);
+    sl_vector_t trans_plus, trans_diff;
+    trans_plus = trans; trans_diff = trans;
+    trans_plus.v[0] += 2*delta_x; trans_diff.v[0] -= 2*delta_x;
+    J_plus = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_plus);
+    J_diff = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_diff);
     inv_cov_matrix.m[0][0] = (J_plus - 2*J + J_diff)/(4*delta_x*delta_x);
-    
-    /* H_11 */
-    t_plus(0) = t(0); t_plus(1) = t(1) + 2*delta_y;
-    t_diff(0) = t(0); t_diff(1) = t(1) - 2*delta_y;
 
-    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R, t_plus);
-    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R, t_diff);
+    /* H_yy */
+    trans_plus = trans; trans_diff = trans;
+    trans_plus.v[1] += 2*delta_y; trans_diff.v[1] -= 2*delta_y;
+    J_plus = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_plus);
+    J_diff = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_diff);
     inv_cov_matrix.m[1][1] = (J_plus - 2*J + J_diff)/(4*delta_y*delta_y);
 
-    /* H_22*/
-    R_plus << cos(theta + 2*delta_theta), -sin(theta + 2*delta_theta),
-        sin(theta + 2*delta_theta), cos(theta + 2*delta_theta);
-    R_diff << cos(theta - 2*delta_theta), -sin(theta - 2*delta_theta),
-        sin(theta - 2*delta_theta), cos(theta - 2*delta_theta);
-
-    J_plus = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t);
-    J_diff = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t);
+    /* H_theta_theta */
+    trans_plus = trans; trans_diff = trans;
+    trans_plus.v[1] += 2*delta_theta; trans_diff.v[1] -= 2*delta_theta;
     inv_cov_matrix.m[2][2] = (J_plus - 2*J + J_diff)/(4*delta_theta*delta_theta);
 
-    Eigen::Vector2d t1, t2, t3, t4;
     /* H_xy = H_yx */
-    t1 << t(0) + delta_x,
-        t(1) + delta_y;
-    t2 << t(0) - delta_x,
-        t(1) + delta_y;
-    t3 << t(0) + delta_x,
-        t(1) - delta_y;
-    t4 << t(0) - delta_x,
-        t(1) - delta_y;
-    double J1, J2, J3, J4;
-    J1 = error_ICP_plus(pcl_ref, pcl_cur, R, t1);
-    J2 = error_ICP_plus(pcl_ref, pcl_cur, R, t2);
-    J3 = error_ICP_plus(pcl_ref, pcl_cur, R, t3);
-    J4 = error_ICP_plus(pcl_ref, pcl_cur, R, t4);
+    sl_vector_t trans_pp, trans_pd, trans_dp, trans_dd;
+    trans_pp = trans; trans_pd = trans; trans_dp = trans; trans_dd = trans;
+    trans_pp.v[0] += delta_x; trans_pp.v[1] += delta_y;
+    trans_pd.v[0] += delta_x; trans_pd.v[1] -= delta_y;
+    trans_dp.v[0] -= delta_x; trans_dp.v[1] += delta_y;
+    trans_dd.v[0] -= delta_x; trans_dd.v[1] -= delta_y;
+    J1 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pp);
+    J2 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pd);
+    J3 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dp);
+    J4 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dd);
     inv_cov_matrix.m[0][1] = (J1 - J2 - J3 + J4)/(4*delta_x*delta_y);
     inv_cov_matrix.m[1][0] = inv_cov_matrix.m[0][1];
 
-    /* H_xtheta = H_theta */
-    t_plus << t(0) + delta_x,
-        t(1);
-    R_plus << cos(theta + delta_theta), -sin(theta + delta_theta),
-        sin(theta + delta_theta), cos(theta + delta_theta);
-    
-    t_diff << t(0) - delta_x,
-        t(1);
-    R_diff << cos(theta - delta_theta), -sin(theta - delta_theta),
-        sin(theta - delta_theta), cos(theta - delta_theta);
-    J1 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_plus);
-    J2 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_diff);
-    J3 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_plus);
-    J4 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_diff);
+    /* H_xtheta = H_thetax */
+    trans_pp = trans; trans_pd = trans; trans_dp = trans; trans_dd = trans;
+    trans_pp.v[0] += delta_x; trans_pp.v[1] += delta_theta;
+    trans_pd.v[0] += delta_x; trans_pd.v[1] -= delta_theta;
+    trans_dp.v[0] -= delta_x; trans_dp.v[1] += delta_theta;
+    trans_dd.v[0] -= delta_x; trans_dd.v[1] -= delta_theta;
+    J1 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pp);
+    J2 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pd);
+    J3 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dp);
+    J4 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dd);
     inv_cov_matrix.m[0][2] = (J1 - J2 - J3 + J4)/(4*delta_x*delta_theta);
     inv_cov_matrix.m[2][0] = inv_cov_matrix.m[0][2];
 
     /* H_ytheta = H_thetay */
-    t_plus << t(0),
-        t(1) + delta_y;
-    t_diff << t(0),
-        t(1) - delta_y;
-    
-    J1 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_plus);
-    J2 = error_ICP_plus(pcl_ref, pcl_cur, R_plus, t_diff);
-    J3 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_plus);
-    J4 = error_ICP_plus(pcl_ref, pcl_cur, R_diff, t_diff);
+    trans_pp = trans; trans_pd = trans; trans_dp = trans; trans_dd = trans;
+    trans_pp.v[0] += delta_y; trans_pp.v[1] += delta_theta;
+    trans_pd.v[0] += delta_y; trans_pd.v[1] -= delta_theta;
+    trans_dp.v[0] -= delta_y; trans_dp.v[1] += delta_theta;
+    trans_dd.v[0] -= delta_y; trans_dd.v[1] -= delta_theta;
+    J1 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pp);
+    J2 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_pd);
+    J3 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dp);
+    J4 = compute_sum_error_ICP_plus(pcl_ref, pcl_cur, trans_dd);
     inv_cov_matrix.m[1][2] = (J1 - J2 - J3 + J4)/(4*delta_y*delta_theta);
     inv_cov_matrix.m[2][1] = inv_cov_matrix.m[1][2];
 }
 
-/** Compute mahalanobis distance*/
-double mahalanobis_distance(sl_node_t& node_t, sl_node_t& node_i) {
-    Eigen::Matrix3d omega;
-    for(int i = 0; i < 3; i++) {
-        for(int j = 0; j < 3; j++) {
-            omega(i, j) = node_i.inv_cov.m[i][j];
-        }
-    }
-    Eigen::Vector3d x, muy;
-    x << node_t.pose.v[0],
-        node_t.pose.v[1],
-        node_t.pose.v[2];
+double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j) {
+    sl_vector_t u;
+    u.v[0] = node_j.pose.v[0] - node_i.pose.v[0];
+    u.v[1] = node_j.pose.v[1] - node_i.pose.v[1];
+    u.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
 
-    muy << node_i.pose.v[0],
-        node_i.pose.v[1],
-        node_i.pose.v[2];
-    return sqrt((x - muy).transpose()*omega*(x - muy));
+    double d;
+    d = (u.v[0]*node_i.inv_cov.m[0][0] + u.v[1]*node_i.inv_cov.m[1][0] + u.v[2]*node_i.inv_cov.m[2][0])*u.v[0];
+    d += (u.v[0]*node_i.inv_cov.m[0][1] + u.v[1]*node_i.inv_cov.m[1][1] + u.v[2]*node_i.inv_cov.m[2][1])*u.v[1];
+    d += (u.v[0]*node_i.inv_cov.m[0][2] + u.v[1]*node_i.inv_cov.m[1][2] + u.v[2]*node_i.inv_cov.m[2][2])*u.v[2];
+    return d;
 }
 
-/** Detect loop-closure*/
-void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {
-    if(cumulative_distance > min_cumulative_distance) {
-        ROS_INFO("Detecting loop clousre...");
-        int num_nodes = graph_t_.set_node_t.size();
-        sl_node_t node_t = graph_t_.set_node_t.back();
-        sl_edge_t edge_ij;
-        double d;
-        cov_func(graph_t_);
-        for(int i = 0; i < num_nodes-1; i++) {
-            d = mahalanobis_distance(node_t, graph_t_.set_node_t[i]);
-            if(d <= 3) {
-                scan_matching_success = false;
-                vanilla_ICP(graph_t_.set_node_t[i], node_t, edge_ij);
-                if(scan_matching_success) {
-                    loop_closure_detected = true;
-                    ROS_INFO("Loop closure detected! %d - %d",node_t.idx, i);
-                    graph_t_.set_edge_t.push_back(edge_ij);
-                }
-            }
-        }
-    }
-}
+// /** Detect loop-closure*/
+// void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {
+//     if(cumulative_distance > min_cumulative_distance) {
+//         ROS_INFO("Detecting loop clousre...");
+//         int num_nodes = graph_t_.set_node_t.size();
+//         sl_node_t node_t = graph_t_.set_node_t.back();
+//         sl_edge_t edge_ij;
+//         double d;
+//         cov_func(graph_t_);
+//         for(int i = 0; i < num_nodes-1; i++) {
+//             d = mahalanobis_distance(node_t, graph_t_.set_node_t[i]);
+//             if(d <= 3) {
+//                 scan_matching_success = false;
+//                 vanilla_ICP(graph_t_.set_node_t[i], node_t, edge_ij);
+//                 if(scan_matching_success) {
+//                     loop_closure_detected = true;
+//                     ROS_INFO("Loop closure detected! %d - %d",node_t.idx, i);
+//                     graph_t_.set_edge_t.push_back(edge_ij);
+//                 }
+//             }
+//         }
+//     }
+// }

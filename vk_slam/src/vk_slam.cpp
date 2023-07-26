@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
     if(!ros::param::get("~map_frame", map_frame)) map_frame = "map";
-    
+
     nav_msgs::OccupancyGrid map;
     vector<double> log_map_t_;
     nav_msgs::Path pose_graph;
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
     sl_vector_t pose_robot_t;
     int idx_node;
     double cum_dist = 0;
-
+    sl_vector_t trans;
     init_slam(log_map_t_, map, pose_graph);
     ros::Time T1, T2, T3, T4, T5, T6, T7, T8;
     ros::Rate rate(map_update_interval);
@@ -105,18 +105,20 @@ int main(int argc, char **argv) {
                 idx_node += 1;
                 node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
-
-                vanilla_ICP(graph_t.set_node_t[idx_node - 1], graph_t.set_node_t[idx_node], edge_current);
+                T1 = ros::Time::now();
+                vanilla_ICP(graph_t.set_node_t[idx_node - 1], graph_t.set_node_t[idx_node], edge_current, trans);
+                T2 = ros::Time::now();
+                cout << "Time ICP" << (T2 - T1).toSec() << endl;
                 graph_t.set_edge_t.push_back(edge_current);
 
-                /** Check loop closure*/
-                cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-                loop_closure_detected = false;
-                detect_loop_closure(cum_dist, graph_t);
-                if(loop_closure_detected) {
-                    ROS_INFO("Optimizing...");
-                    optimization(graph_t);
-                }
+                // /** Check loop closure*/
+                // cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
+                // loop_closure_detected = false;
+                // detect_loop_closure(cum_dist, graph_t);
+                // if(loop_closure_detected) {
+                //     ROS_INFO("Optimizing...");
+                //     optimization(graph_t);
+                // }
                 u_t[0] = odom_t;
             }
             mapping(graph_t, log_map_t_, map, pose_graph);

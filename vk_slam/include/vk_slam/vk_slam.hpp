@@ -55,9 +55,25 @@ struct sl_matrix_t {
 	double m[3][3];
 };
 
+struct sl_corr_t {
+    /** 1 if this correspondence is valid, -1 invalid */
+	int valid;
+	/** Closest point in the other scan. */
+	int j1;
+	/** Second closest point in the other scan. */
+	int j2;
+    /** Squared distance from p(i) to point j1 */
+	double dist2_j1;
+    double weight;
+};
+
 /* Define laser scan data: distance data & ray angle*/
 struct sl_scan_t {
 	vector<sl_vector_t> ranges;
+};
+
+struct sl_point_cloud_t {
+    vector<sl_vector_t> pcl;
 };
 
 /* Define node: pose & laser scan */
@@ -119,7 +135,10 @@ bool data_ = false;
 bool first_time = true;
 bool inverted_laser;
 bool loop_closure_detected;
-bool max_inter_ICP;
+bool overlap_best;
+
+int max_inter_ICP = 100;
+double converged_ICP = 0.01;
 
 int max_inter;
 double converged_graph;
@@ -142,29 +161,6 @@ ros::Publisher map_pub, pose_graph_pub;
 nav_msgs::Odometry odom;
 sl_scan_t scan_t;
 
-bool scan_valid(double z);
-void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
-bool update_node(sl_vector_t u_t[2]);
-void update_motion(sl_vector_t u_t[2]);
-
-Eigen::MatrixXd compute_points(sl_node_t& node_i);
-double norm2(Eigen::Vector2d& p, Eigen::Vector2d& q);
-void get_correspondences(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B);
-void crossCovariance_Mean(Eigen::MatrixXd& cores, Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::Vector2d& mean_A, Eigen::Vector2d& mean_B, Eigen::MatrixXd& H);
-double error_ICP(Eigen::MatrixXd& cores, Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t);
-double error_ICP_plus(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t);
-void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j);
-void inv_covariance_ICP(Eigen::MatrixXd& pcl_ref, Eigen::MatrixXd& pcl_cur, Eigen::Matrix2d& R, Eigen::Vector2d& t, sl_matrix_t& inv_cov_matrix);
-
-Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
-void optimization(sl_graph_t& graph_t_);
-
-void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
-void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
-void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
-
 inline double normalize(double z) {
     return atan2(sin(z), cos(z));
 }
@@ -182,3 +178,28 @@ inline double angle_diff(double a, double b) {
         return d2;
     }
 }
+
+bool scan_valid(double z);
+void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
+bool update_node(sl_vector_t u_t[2]);
+void update_motion(sl_vector_t u_t[2]);
+
+// Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+// Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+// double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
+// void optimization(sl_graph_t& graph_t_);
+// void cov_func(sl_graph_t& graph_t_);
+
+void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
+void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);
+void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores,
+    sl_vector_t& mean_ref, sl_vector_t& mean_cur_w, double (&H)[2][2]);
+double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
+double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
+void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix);
+
+void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
+void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
+void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
