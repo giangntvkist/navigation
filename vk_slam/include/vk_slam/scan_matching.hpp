@@ -38,7 +38,6 @@ void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w,
     sl_vector_t p, q;
     sl_corr_t w;
     cores.clear();
-    cores.resize(num_point_cur);
     for(int i = 0; i < num_point_cur; i++) {
         d_min = inf;
         idx = -1;
@@ -52,28 +51,28 @@ void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w,
             }
         }
         if(d_min < dist_threshold) {
-            w.valid = 1;
+            w.i = i;
             w.j1 = idx;
             w.dist2_j1 = d_min;
             w.weight = 1;
         }else {
-            w.valid = -1;
-            w.j1 = idx;
-            w.dist2_j1 = d_min;
+            w.i = -1;
+            w.j1 = -1;
+            w.dist2_j1 = -1;
             w.weight = 0;
         }
-        cores[i] = w;
+        cores.push_back(w);
     }
     for(int i = 0; i < num_point_cur; i++) {
-        if(cores[i].valid == 1) {
-            for(int j = 0; j < num_point_cur; j++) {
-                if(j != i) {
-                    if(cores[j].j1 == cores[i].j1) {
-                        if(cores[j].dist2_j1 > cores[i].dist2_j1) {
-                            cores[j].valid = -1;
-                        }else {
-                            cores[i].valid = -1;
-                        }
+        for(int j = 0; j < num_point_ref; j++) {
+            if(i != j && cores[i].i != -1 && cores[i].j1 != -1) {
+                if(cores[i].j1 == cores[j].j1) {
+                    if(cores[i].dist2_j1 <= cores[j].dist2_j1) {
+                        cores[j].j1 = -1;
+                        cores[j].dist2_j1 = -1;
+                    }else {
+                        cores[i].j1 = -1;
+                        cores[i].dist2_j1 = -1;
                     }
                 }
             }
@@ -81,42 +80,42 @@ void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w,
     }
 }
 
-void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores,
-    sl_vector_t& mean_ref, sl_vector_t& mean_cur_w, double (&H)[2][2]) {
+void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores,
+    sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]) {
     int num_pairs = cores.size();
     double sum_weight = 0;
     int j;
     mean_ref.v[0] = 0;
     mean_ref.v[1] = 0;
     for(int i = 0; i < num_pairs; i++) {
-        if(cores[i].valid == 1) {
+        if(cores[i].j1 != -1) {
             j = cores[i].j1;
             mean_ref.v[0] += cores[i].weight*pcl_ref.pcl[j].v[0];
             mean_ref.v[1] += cores[i].weight*pcl_ref.pcl[j].v[1];
 
-            mean_cur_w.v[0] += cores[i].weight*pcl_cur_w.pcl[i].v[0];
-            mean_cur_w.v[1] += cores[i].weight*pcl_cur_w.pcl[i].v[1];
+            mean_cur.v[0] += cores[i].weight*pcl_cur.pcl[i].v[0];
+            mean_cur.v[1] += cores[i].weight*pcl_cur.pcl[i].v[1];
             sum_weight += cores[i].weight;
         }
     }
     mean_ref.v[0] = mean_ref.v[0]/sum_weight;
     mean_ref.v[1] = mean_ref.v[1]/sum_weight;
 
-    mean_cur_w.v[0] = mean_cur_w.v[0]/sum_weight;
-    mean_cur_w.v[1] = mean_cur_w.v[1]/sum_weight;
+    mean_cur.v[0] = mean_cur.v[0]/sum_weight;
+    mean_cur.v[1] = mean_cur.v[1]/sum_weight;
     for(int i = 0; i < 2; i++) {
         for(int j = 0; j < 2; j++) {
             H[i][j] = 0;
         }
     }
     for(int i = 0; i < num_pairs; i++) {
-        if(cores[i].valid == 1) {
+        if(cores[i].j1 != -1) {
             j = cores[i].j1;
-            H[0][0] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur_w.pcl[i].v[0] - mean_cur_w.v[0])*cores[i].weight;
-            H[0][1] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur_w.pcl[i].v[1] - mean_cur_w.v[1])*cores[i].weight;
+            H[0][0] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur.pcl[i].v[0] - mean_cur.v[0])*cores[i].weight;
+            H[0][1] += (pcl_ref.pcl[j].v[0] - mean_ref.v[0])*(pcl_cur.pcl[i].v[1] - mean_cur.v[1])*cores[i].weight;
 
-            H[1][0] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur_w.pcl[i].v[0] - mean_cur_w.v[0])*cores[i].weight;
-            H[1][1] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur_w.pcl[i].v[1] - mean_cur_w.v[1])*cores[i].weight;
+            H[1][0] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur.pcl[i].v[0] - mean_cur.v[0])*cores[i].weight;
+            H[1][1] += (pcl_ref.pcl[j].v[1] - mean_ref.v[1])*(pcl_cur.pcl[i].v[1] - mean_cur.v[1])*cores[i].weight;
         }
     }
 
@@ -127,7 +126,7 @@ double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cu
     int num_point = pcl_cur_w.pcl.size();
     int j;
     for(int i = 0; i < num_point; i++) {
-        if(cores[i].valid == 1) {
+        if(cores[i].j1 != -1) {
             j = cores[i].j1;
             sum_e += pow(pcl_ref.pcl[j].v[0] - pcl_cur_w.pcl[i].v[0], 2) + pow(pcl_ref.pcl[j].v[1] - pcl_cur_w.pcl[i].v[1], 2);
         }
@@ -137,24 +136,16 @@ double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cu
 
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_vector_t& trans) {
     Eigen::Matrix2d R_ij;
-    Eigen::Vector2d t_ij;
-
     R_ij.setZero();
-    R_ij(0, 0) = cos(node_i.pose.v[2])*cos(node_j.pose.v[2]) + sin(node_i.pose.v[2])*sin(node_j.pose.v[2]);
-    R_ij(0, 1) = -cos(node_i.pose.v[2])*sin(node_j.pose.v[2]) + sin(node_i.pose.v[2])*cos(node_j.pose.v[2]);
-    R_ij(1, 0) = -sin(node_i.pose.v[2])*cos(node_j.pose.v[2]) + cos(node_i.pose.v[2])*sin(node_j.pose.v[2]);
-    R_ij(1, 1) = sin(node_i.pose.v[2])*sin(node_j.pose.v[2]) + cos(node_i.pose.v[2])*cos(node_j.pose.v[2]);
-
     sl_point_cloud_t pcl_ref, pcl_cur;
     compute_points(node_i, pcl_ref);
     compute_points(node_j, pcl_cur);
     int num_point = pcl_cur.pcl.size();
-    sl_vector_t mean_ref, mean_cur_w;
+    sl_vector_t mean_ref, mean_cur;
 
     trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
     trans.v[1] = -sin(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + cos(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
     trans.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
-    // trans.v[2] = atan2(R_ij(1, 0), R_ij(0, 0));
 
     sl_point_cloud_t pcl_cur_w;
     vector<sl_corr_t> cores;
@@ -162,13 +153,21 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_ve
     H_matrix.setZero(2, 2);
 
     double H[2][2];
-    int count = 0;
-    double sum_e_k, sum_e_k_1, theta_ij, eps;
-    sum_e_k_1 = inf;
-    while(count < max_inter_ICP && (fabs(eps) > converged_ICP)) {
-        transform_pcl(pcl_cur, pcl_cur_w, trans);
+    int count, num_cores;
+    double sum_e_k;
+    sum_e_k = inf;
+    count = 0;
+    num_cores = 0;
+    transform_pcl(pcl_cur, pcl_cur_w, trans);
+    while(sum_e_k > 2e-4*num_cores && count < max_inter_ICP) {
+        num_cores = 0;
         get_correspondences(pcl_ref, pcl_cur_w, cores);
-        compute_cov_mean_ICP(pcl_ref, pcl_cur_w, cores, mean_ref, mean_cur_w, H);
+        for(int i = 0; i < cores.size(); i++) {
+            if(cores[i].j1 != -1) {
+                num_cores += 1;
+            }
+        }
+        compute_cov_mean_ICP(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {
             for(int j = 0; j < 2; j++) {
                 H_matrix(i, j) = H[i][j];
@@ -180,13 +179,13 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_ve
         R_ij = U*V.transpose();
 
         trans.v[2] = atan2(R_ij(1, 0), R_ij(0, 0));
-        trans.v[0] = mean_ref.v[0] - (mean_cur_w.v[0]*cos(trans.v[2]) - mean_cur_w.v[1]*sin(trans.v[2]));
-        trans.v[1] = mean_ref.v[1] - (mean_cur_w.v[0]*sin(trans.v[2]) + mean_cur_w.v[1]*cos(trans.v[2]));
+        trans.v[0] = mean_ref.v[0] - (mean_cur.v[0]*cos(trans.v[2]) - mean_cur.v[1]*sin(trans.v[2]));
+        trans.v[1] = mean_ref.v[1] - (mean_cur.v[0]*sin(trans.v[2]) + mean_cur.v[1]*cos(trans.v[2]));
+        transform_pcl(pcl_cur, pcl_cur_w, trans);
         sum_e_k = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores);
-        eps = sum_e_k - sum_e_k_1;
-        sum_e_k_1 = sum_e_k;
         count += 1;
     }
+    cout << "count: " << count << " " << sum_e_k << " " << num_cores << endl;
     if(count == max_inter_ICP) {
         ROS_WARN("Scan matching failed!");
         scan_matching_success = false;
@@ -198,7 +197,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_ve
         node_j.pose.v[0] = trans.v[0]*cos(trans.v[2]) - trans.v[1]*sin(trans.v[2]) + node_i.pose.v[0];
         node_j.pose.v[1] = trans.v[0]*sin(trans.v[2]) + trans.v[1]*cos(trans.v[2]) + node_i.pose.v[1];
         node_j.pose.v[2] = trans.v[2] + node_i.pose.v[2];
-        if(sum_e_k < e_threshold) {
+        if(double(num_cores/pcl_cur.pcl.size() > match_rate_ICP)) {
             overlap_best = true;
         }else {
             overlap_best = false;
@@ -210,11 +209,6 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, sl_ve
     edge_ij.z.v[1] = trans.v[1];
     edge_ij.z.v[2] = trans.v[2];
     inverse_cov_ICP(pcl_ref, pcl_cur, trans, edge_ij.inv_cov);
-    for(int i = 0; i < 3; i++) {
-        for(int j = 0; j < 3; j++) {
-            edge_ij.inv_cov.m[i][j] *= 2*pow(sigma, -2);
-        }
-    }
 }
 
 double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans) {
@@ -290,18 +284,18 @@ void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_ve
     inv_cov_matrix.m[2][1] = inv_cov_matrix.m[1][2];
 }
 
-double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j) {
-    sl_vector_t u;
-    u.v[0] = node_j.pose.v[0] - node_i.pose.v[0];
-    u.v[1] = node_j.pose.v[1] - node_i.pose.v[1];
-    u.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
+// double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j) {
+//     sl_vector_t u;
+//     u.v[0] = node_j.pose.v[0] - node_i.pose.v[0];
+//     u.v[1] = node_j.pose.v[1] - node_i.pose.v[1];
+//     u.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
 
-    double d;
-    d = (u.v[0]*node_i.inv_cov.m[0][0] + u.v[1]*node_i.inv_cov.m[1][0] + u.v[2]*node_i.inv_cov.m[2][0])*u.v[0];
-    d += (u.v[0]*node_i.inv_cov.m[0][1] + u.v[1]*node_i.inv_cov.m[1][1] + u.v[2]*node_i.inv_cov.m[2][1])*u.v[1];
-    d += (u.v[0]*node_i.inv_cov.m[0][2] + u.v[1]*node_i.inv_cov.m[1][2] + u.v[2]*node_i.inv_cov.m[2][2])*u.v[2];
-    return d;
-}
+//     double d;
+//     d = (u.v[0]*node_i.inv_cov.m[0][0] + u.v[1]*node_i.inv_cov.m[1][0] + u.v[2]*node_i.inv_cov.m[2][0])*u.v[0];
+//     d += (u.v[0]*node_i.inv_cov.m[0][1] + u.v[1]*node_i.inv_cov.m[1][1] + u.v[2]*node_i.inv_cov.m[2][1])*u.v[1];
+//     d += (u.v[0]*node_i.inv_cov.m[0][2] + u.v[1]*node_i.inv_cov.m[1][2] + u.v[2]*node_i.inv_cov.m[2][2])*u.v[2];
+//     return d;
+// }
 
 // /** Detect loop-closure*/
 // void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {

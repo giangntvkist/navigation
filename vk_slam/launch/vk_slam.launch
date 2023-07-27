@@ -15,6 +15,7 @@
 		<param name = "~min_cumulative_distance" type = "double" value = "2.0"/>
 		<param name = "~dist_threshold" type = "double" value = "1.0"/>
 		<param name = "~converged_graph" type = "double" value = "0.001"/>
+		<param name = "~converged_ICP" type = "double" value = "0.001"/>
 		
 		<param name = "~max_inter" type = "double" value = "100"/>
 		<param name = "~throttle_scan" type = "double" value = "2"/>

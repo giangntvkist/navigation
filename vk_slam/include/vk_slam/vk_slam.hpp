@@ -56,8 +56,7 @@ struct sl_matrix_t {
 };
 
 struct sl_corr_t {
-    /** 1 if this correspondence is valid, -1 invalid */
-	int valid;
+	int i;
 	/** Closest point in the other scan. */
 	int j1;
 	/** Second closest point in the other scan. */
@@ -109,6 +108,7 @@ struct sl_graph_t {
 #define omni 0
 #define diff 1
 #define inf 1e4
+#define un_valid -1
 int model_type; /* Type of model robot: differential or omnidirectional robot */
 
 double range_min;
@@ -137,21 +137,18 @@ bool inverted_laser;
 bool loop_closure_detected;
 bool overlap_best;
 
-int max_inter_ICP = 100;
-double converged_ICP = 0.01;
+int max_inter_ICP;
+double match_rate_ICP;
 
 int max_inter;
 double converged_graph;
 double map_update_interval;
-double sigma;
-double loop_kernel_size;
 
 double min_trans, min_rot;
 int map_width, map_height;
 double map_resolution;
 double dist_threshold;
 double min_cumulative_distance;
-double e_threshold;
 bool scan_matching_success;
 
 double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
@@ -193,9 +190,9 @@ void update_motion(sl_vector_t u_t[2]);
 void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
 void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);
 void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
-void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores,
-    sl_vector_t& mean_ref, sl_vector_t& mean_cur_w, double (&H)[2][2]);
-double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores,
+    sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]);
+double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores);
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
 double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
 void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix);
