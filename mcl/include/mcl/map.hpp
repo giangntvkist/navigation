@@ -30,6 +30,12 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     _data = true;
 }
 
+// void poseInitCallback(const geometry_msgs::PoseWithCovarianceStamped& msg) {
+//     init_pose_x = msg.pose.pose.position.x;
+//     init_pose_y = msg.pose.pose.position.y;
+//     init_pose_theta = tf::getYaw(msg.pose.pose.orientation);
+// }
+
 bool map_valid(int idx, int idy) {
     return (idx >=0 && idx < occ_map.info.width && idy >= 0 && idy < occ_map.info.height);
 }

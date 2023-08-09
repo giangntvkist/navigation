@@ -131,6 +131,7 @@ bool init_localization = false;
 
 void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
+// void poseInitCallback(const geometry_msgs::PoseWithCovarianceStamped& msg);
 bool map_valid(int idx, int idy);
 void get_lookuptable();
 
