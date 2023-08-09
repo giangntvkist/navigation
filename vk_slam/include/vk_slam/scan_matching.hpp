@@ -183,7 +183,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
 }
 
 /** Checking loop closure */
-bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
+bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
     Eigen::Matrix2d R_ij;
     R_ij.setZero();
     sl_point_cloud_t pcl_ref, pcl_cur;
@@ -230,6 +230,11 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
         sum_e_k_1 = sum_e_k;
         count += 1;
     }
+    edge_ij.i = node_i.idx;
+    edge_ij.j = node_j.idx;
+    edge_ij.z.v[0] = trans.v[0];
+    edge_ij.z.v[1] = trans.v[1];
+    edge_ij.z.v[2] = trans.v[2];
     if(count == max_inter_ICP) {
         return false;
     }else {
@@ -350,7 +355,7 @@ void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {
             d = mahalanobis_distance(node_t, graph_t_.set_node_t[i]);
             cout << "d " << d << endl;
             if(d <= 3) {
-                overlap_best = check_loop_closure(graph_t_.set_node_t[i], node_t);
+                overlap_best = check_loop_closure(graph_t_.set_node_t[i], node_t, edge_ij);
                 if(overlap_best) {
                     ROS_INFO("Loop closure detected! %d - %d",node_t.idx, i);
                     loop_closure_detected = true;
