@@ -147,9 +147,8 @@ double map_update_interval;
 double min_trans, min_rot;
 int map_width, map_height;
 double map_resolution;
-double dist_threshold;
+double z_hit, sigma;
 double min_cumulative_distance;
-bool scan_matching_success;
 
 double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
 
@@ -176,27 +175,35 @@ inline double angle_diff(double a, double b) {
     }
 }
 
+// bool compare(const sl_corr_t& a, sl_corr_t& b){
+//    return a.dist2_j1 < b.dist2_j1;
+// }
+
 bool scan_valid(double z);
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
 bool update_node(sl_vector_t u_t[2]);
 void update_motion(sl_vector_t u_t[2]);
 
-// Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-// Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-// double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
-// void optimization(sl_graph_t& graph_t_);
-// void cov_func(sl_graph_t& graph_t_);
+Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
+void optimization(sl_graph_t& graph_t_);
+void cov_func(sl_graph_t& graph_t_);
 
 void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
 void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);
 void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+// double gold_rate(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
 void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores,
     sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]);
 double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores);
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
+
+bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j);
 double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
-void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix);
+void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix, int num_cores);
 
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
 void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
+void printf_matrix(sl_matrix_t& A);

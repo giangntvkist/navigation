@@ -8,10 +8,10 @@ int main(int argc, char **argv) {
     ROS_INFO("Running vk_slam node!");
     ros::NodeHandle nh;
 
-    map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 10);
+    map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 1);
     pose_graph_pub = nh.advertise<nav_msgs::Path>("pose_graph", 10);
 
-    message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 10);
+    message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odometry", 10);
     message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub(nh, "scan1", 10);
     typedef sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::LaserScan> MySyncPolicy;
     Synchronizer<MySyncPolicy> sync(MySyncPolicy(10),odom_sub, laser_scan_sub);
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~laser_pose_x", laser_pose_x)) laser_pose_x = 0.289;
     if(!ros::param::get("~laser_pose_y", laser_pose_y)) laser_pose_y = -0.0;
     if(!ros::param::get("~laser_pose_theta", laser_pose_theta)) laser_pose_theta = 0.0;
-    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 2;
+    if(!ros::param::get("~throttle_scan", throttle_scan)) throttle_scan = 1;
     if(!ros::param::get("~inverted_laser", inverted_laser)) inverted_laser = true;
 
     if(!ros::param::get("~init_pose_x", init_pose_x)) init_pose_x = 0.0;
@@ -40,8 +40,9 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 10;
 
     if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.3;
-    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.25;
-    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 1.0;
+    if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.5;
+    if(!ros::param::get("~z_hit", z_hit)) z_hit = 0.95;
+    if(!ros::param::get("~sigma", sigma)) sigma = 0.1;
 
     if(!ros::param::get("~delta_x", delta_x)) delta_x = 0.02;
     if(!ros::param::get("~delta_y", delta_y)) delta_y = 0.02;
@@ -90,7 +91,7 @@ int main(int argc, char **argv) {
                 idx_node = 0;
                 node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
-
+                mapping(graph_t, log_map_t_, map, pose_graph);
                 odom_t_1 = odom_t;
                 u_t[0] = odom_t;
                 first_time = false;
@@ -98,6 +99,7 @@ int main(int argc, char **argv) {
             u_t[1] = odom_t;
             u_t_[0] = odom_t_1;
             u_t_[1] = odom_t;
+            
             update_motion(u_t_, pose_robot_t);
             if(update_node(u_t)) {
                 node_current.pose = pose_robot_t;
@@ -106,22 +108,24 @@ int main(int argc, char **argv) {
                 node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
                 T1 = ros::Time::now();
-                vanilla_ICP(graph_t.set_node_t[idx_node - 1], graph_t.set_node_t[idx_node], edge_current, trans);
+                vanilla_ICP(graph_t.set_node_t[idx_node - 1], graph_t.set_node_t[idx_node], edge_current);
                 T2 = ros::Time::now();
-                cout << "Time ICP" << (T2 - T1).toSec() << endl;
+                // cout << "Time ICP" << (T2 - T1).toSec() << endl;
                 graph_t.set_edge_t.push_back(edge_current);
 
-                // /** Check loop closure*/
+                /** Check loop closure*/
                 // cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-                // loop_closure_detected = false;
-                // detect_loop_closure(cum_dist, graph_t);
-                // if(loop_closure_detected) {
-                //     ROS_INFO("Optimizing...");
-                //     optimization(graph_t);
-                // }
+                cum_dist += angle_diff(u_t[1].v[2], u_t[0].v[2]);
+                detect_loop_closure(cum_dist, graph_t);
+                if(loop_closure_detected) {
+                    ROS_INFO("Optimizing...");
+                    optimization(graph_t);
+                }
+
+                pose_robot_t = graph_t.set_node_t[idx_node].pose;
+                mapping(graph_t, log_map_t_, map, pose_graph);
                 u_t[0] = odom_t;
             }
-            mapping(graph_t, log_map_t_, map, pose_graph);
             odom_t_1 = odom_t;
         }
         rate.sleep();

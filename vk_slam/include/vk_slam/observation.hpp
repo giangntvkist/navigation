@@ -14,9 +14,9 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     }else {
         inv_scan = 1.0;
     }
-    for(int i = 0; i < scan.ranges.size(); i += throttle_scan) {
-        if(scan_valid(scan.ranges[i])) {
-            ray_i.v[0] = scan.ranges[i];
+    for(int i = 0; i < 540; i += throttle_scan) {
+        if(scan_valid(scan.ranges[i+135])) {
+            ray_i.v[0] = scan.ranges[i+135];
             ray_i.v[1] = inv_scan*(i*angle_increment - angle_max);
             scan_t.ranges.push_back(ray_i);
         } 
@@ -153,13 +153,10 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
     map_pub.publish(map_t);
 
     geometry_msgs::PoseStamped p;
-    pose_graph_t.poses.clear();
-    for(int i = 0; i < num_nodes; i++) {
-        p.pose.position.x = graph_t_.set_node_t[i].pose.v[0];
-        p.pose.position.y = graph_t_.set_node_t[i].pose.v[1];
-        p.pose.position.z = 0.0;
-        pose_graph_t.poses.push_back(p);
-    }
+    p.pose.position.x = graph_t_.set_node_t.back().pose.v[0];
+    p.pose.position.y = graph_t_.set_node_t.back().pose.v[1];
+    p.pose.position.z = 0.0;
+    pose_graph_t.poses.push_back(p);
     pose_graph_pub.publish(pose_graph_t);
 }
 
@@ -175,12 +172,14 @@ void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_ms
     map_t.info.origin.orientation = tf::createQuaternionMsgFromYaw(0.0);
     map_t.data.resize(map_t.info.width*map_t.info.height);
 
-    pose_graph_t.header.frame_id = map_frame;
     int num_cells = map_t.data.size();
     log_map_t.clear();
     for (int i = 0; i < num_cells; i++) {
         log_map_t.push_back(l_0);
     }
+
+    pose_graph_t.header.frame_id = map_frame;
+    pose_graph_t.poses.clear();
 }
 
 bool update_node(sl_vector_t u_t[2]) {
@@ -212,3 +211,35 @@ void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t) {
         q_t.v[2] = normalize(q_t.v[2] + delta_rot1 + delta_rot2);
     }
 }
+
+void printf_matrix(sl_matrix_t& A) {
+    cout << "[";
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) {
+            cout << A.m[i][j] << "  " ;
+        }
+        cout << endl;
+    }
+    cout << "]";
+}
+
+/* Trimming ICP */
+// double gold_rate(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores) {
+//     double s_min = 0.4, s_max = 1.0;
+//     double s1, s2, f1, f2;
+//     double phi = (sqrt(5) - 1)/2;
+//     int lamda = 2;
+//     s1 = s_max - phi*(s_max - s_min); s2 = s_min + phi*(s_max - s_min);
+//     while(fabs(s_max - s_min) > 1e-3) {
+//         f1 = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores, s1)/(pow(s1, 1+lamda));
+//         f2 = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores, s2)/(pow(s2, 1+lamda));
+//         if(f1 < f2) {
+//             s_max = s2;
+//         }else {
+//             s_min = s1;
+//         }
+//         s1 = s_max - phi*(s_max - s_min);
+//         s2 = s_min + phi*(s_max - s_min);
+//     }
+//     return (s_min + s_max)/2;
+// }
