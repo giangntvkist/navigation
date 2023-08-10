@@ -132,7 +132,7 @@ string base_frame;
 string odom_frame;
 
 bool data_ = false;
-bool first_time = true;
+bool first_time;
 bool inverted_laser;
 bool loop_closure_detected;
 bool overlap_best;
@@ -198,10 +198,13 @@ void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, 
     sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]);
 double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores);
 void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
-
-bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
 double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
 void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix, int num_cores);
+
+bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j);
+double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j);
+void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
+void detect_loop_closure(sl_graph_t& graph_t_);
 
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);

@@ -64,10 +64,8 @@ void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, 
     int num_pairs = cores.size();
     double sum_weight = 0;
     int j;
-    mean_ref.v[0] = 0;
-    mean_ref.v[1] = 0;
-    mean_cur.v[0] = 0;
-    mean_cur.v[1] = 0;
+    mean_ref.v[0] = 0; mean_ref.v[1] = 0;
+    mean_cur.v[0] = 0; mean_cur.v[1] = 0;
     for(int i = 0; i < num_pairs; i++) {
         j = cores[i].j1;
         mean_ref.v[0] += cores[i].weight*pcl_ref.pcl[j].v[0];
@@ -134,7 +132,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
     sum_e_k_1 = inf; eps = inf;
     count = 0; num_cores = 0;
     transform_pcl(pcl_cur, pcl_cur_w, trans);
-    while(fabs(eps) > 1e-3 && count < max_inter_ICP) {
+    while(fabs(eps) > 2e-4 && count < max_inter_ICP) {
         get_correspondences(pcl_ref, pcl_cur_w, cores);
         compute_cov_mean_ICP(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {
@@ -158,12 +156,13 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
         count += 1;
     }
     /* Caculate number of correspondence points */
+    // double a = z_hit/sqrt(2*M_PI*pow(sigma, 2));
     // for(int i = 0; i < cores.size(); i++) {
-    //     if(cores[i].weight > 0.95) {
+    //     if(cores[i].weight > 0.95*a) {
     //         num_cores += 1;
     //     }
     // }
-    //cout << "count: " << count << " " << sum_e_k << " " << num_cores << endl;
+    // cout << "count: " << count << " " << sum_e_k << " " << num_cores << endl;
     if(count == max_inter_ICP) {
         ROS_WARN("Scan matching failed!");
         trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
@@ -180,75 +179,6 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
     edge_ij.z.v[1] = trans.v[1];
     edge_ij.z.v[2] = trans.v[2];
     inverse_cov_ICP(pcl_ref, pcl_cur, trans, edge_ij.inv_cov, num_cores);
-}
-
-/** Checking loop closure */
-bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
-    Eigen::Matrix2d R_ij;
-    R_ij.setZero();
-    sl_point_cloud_t pcl_ref, pcl_cur;
-    compute_points(node_i, pcl_ref);
-    compute_points(node_j, pcl_cur);
-    int num_point = pcl_cur.pcl.size();
-    sl_vector_t mean_ref, mean_cur;
-    sl_vector_t trans;
-    trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
-    trans.v[1] = -sin(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + cos(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
-    trans.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
-
-    sl_point_cloud_t pcl_cur_w;
-    vector<sl_corr_t> cores;
-    Eigen::MatrixXd U, V, H_matrix;
-    H_matrix.setZero(2, 2);
-
-    double H[2][2];
-    int count, num_cores;
-    double sum_e_k, sum_e_k_1, eps;
-    sum_e_k_1 = inf; eps = inf;
-    count = 0; num_cores = 0;
-    transform_pcl(pcl_cur, pcl_cur_w, trans);
-    while(fabs(eps) > 1e-3 && count < max_inter_ICP) {
-        get_correspondences(pcl_ref, pcl_cur_w, cores);
-        compute_cov_mean_ICP(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
-        for(int i = 0; i < 2; i++) {
-            for(int j = 0; j < 2; j++) {
-                H_matrix(i, j) = H[i][j];
-            }
-        }
-        Eigen::JacobiSVD<MatrixXd> svd( H_matrix, ComputeThinU | ComputeThinV);
-        U = svd.matrixU();
-        V = svd.matrixV();
-        R_ij = U*V.transpose();
-
-        trans.v[2] = atan2(R_ij(1, 0), R_ij(0, 0));
-        trans.v[0] = mean_ref.v[0] - (mean_cur.v[0]*cos(trans.v[2]) - mean_cur.v[1]*sin(trans.v[2]));
-        trans.v[1] = mean_ref.v[1] - (mean_cur.v[0]*sin(trans.v[2]) + mean_cur.v[1]*cos(trans.v[2]));
-        transform_pcl(pcl_cur, pcl_cur_w, trans);
-        sum_e_k = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores);
-
-        eps = sum_e_k - sum_e_k_1;
-        sum_e_k_1 = sum_e_k;
-        count += 1;
-    }
-    edge_ij.i = node_i.idx;
-    edge_ij.j = node_j.idx;
-    edge_ij.z.v[0] = trans.v[0];
-    edge_ij.z.v[1] = trans.v[1];
-    edge_ij.z.v[2] = trans.v[2];
-    if(count == max_inter_ICP) {
-        return false;
-    }else {
-        for(int i = 0; i < cores.size(); i++) {
-            if(cores[i].weight > 0.95) {
-                num_cores += 1;
-            }
-        }
-        if(double(num_cores/pcl_cur.pcl.size() >= match_rate_ICP)) {
-            return true;
-        }else {
-            return false;
-        }
-    }   
 }
 
 double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans) {
@@ -325,43 +255,5 @@ void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_ve
     inv_cov_matrix.m[1][2] = anpha*(J1 - J2 - J3 + J4)/(4*delta_y*delta_theta);
     inv_cov_matrix.m[2][1] = inv_cov_matrix.m[1][2];
 
-    printf_matrix(inv_cov_matrix);
-}
-
-double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j) {
-    sl_vector_t u;
-    u.v[0] = node_j.pose.v[0] - node_i.pose.v[0];
-    u.v[1] = node_j.pose.v[1] - node_i.pose.v[1];
-    u.v[2] = angle_diff(node_j.pose.v[2], node_i.pose.v[2]);
-    cout << "node_i.inv_cov:" ;
-    printf_matrix(node_i.inv_cov);
-    double d;
-    d = (u.v[0]*node_i.inv_cov.m[0][0] + u.v[1]*node_i.inv_cov.m[1][0] + u.v[2]*node_i.inv_cov.m[2][0])*u.v[0];
-    d += (u.v[0]*node_i.inv_cov.m[0][1] + u.v[1]*node_i.inv_cov.m[1][1] + u.v[2]*node_i.inv_cov.m[2][1])*u.v[1];
-    d += (u.v[0]*node_i.inv_cov.m[0][2] + u.v[1]*node_i.inv_cov.m[1][2] + u.v[2]*node_i.inv_cov.m[2][2])*u.v[2];
-    return d;
-}
-
-/** Detect loop-closure */
-void detect_loop_closure(double& cumulative_distance, sl_graph_t& graph_t_) {
-    // if(cumulative_distance > min_cumulative_distance) {
-        if(cumulative_distance > 2*M_PI) {
-        int num_nodes = graph_t_.set_node_t.size();
-        sl_node_t node_t = graph_t_.set_node_t.back();
-        sl_edge_t edge_ij;
-        double d;
-        cov_func(graph_t_);
-        for(int i = 0; i < num_nodes-1; i++) {
-            d = mahalanobis_distance(node_t, graph_t_.set_node_t[i]);
-            cout << "d " << d << endl;
-            if(d <= 3) {
-                overlap_best = check_loop_closure(graph_t_.set_node_t[i], node_t, edge_ij);
-                if(overlap_best) {
-                    ROS_INFO("Loop closure detected! %d - %d",node_t.idx, i);
-                    loop_closure_detected = true;
-                    graph_t_.set_edge_t.push_back(edge_ij);
-                }
-            }
-        }
-    }
+    // printf_matrix(inv_cov_matrix);
 }

@@ -220,7 +220,7 @@ void printf_matrix(sl_matrix_t& A) {
         }
         cout << endl;
     }
-    cout << "]";
+    cout << "]" << endl;
 }
 
 /* Trimming ICP */
