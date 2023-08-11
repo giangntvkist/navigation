@@ -225,7 +225,7 @@ void optimization(sl_graph_t& graph_t_) {
             graph_t_.set_node_t[i].pose.v[j] = x(k);
         }
     }
-    cout << " x " << x << endl;
+    // cout << " x " << x << endl;
 }
 
 void cov_func(sl_graph_t& graph_t_) {

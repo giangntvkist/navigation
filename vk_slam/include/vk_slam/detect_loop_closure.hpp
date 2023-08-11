@@ -52,8 +52,8 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
             num_cores += 1;
         }
     }
-    cout << "match:" << (double)num_cores/pcl_cur.pcl.size()<< endl;
-    if((double)num_cores/pcl_cur.pcl.size() >= 0.9) {
+    // cout << "match:" << (double)num_cores/pcl_cur.pcl.size()<< endl;
+    if((double)num_cores/pcl_cur.pcl.size() >= match_rate_ICP) {
         return true;
     }
     return false;
@@ -125,22 +125,18 @@ void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& ed
     edge_ij.z.v[1] = trans.v[1];
     edge_ij.z.v[2] = trans.v[2];
 }
+
 /** Detect loop-closure */
 void detect_loop_closure(sl_graph_t& graph_t_) {
     int num_nodes = graph_t_.set_node_t.size();
     sl_node_t node_t = graph_t_.set_node_t.back();
     sl_edge_t edge_ij;
     double d;
-    ros::Time T1, T2, T3, T4, T5, T6, T7, T8;
-    T1 = ros::Time::now();
     cov_func(graph_t_);
-    T2 = ros::Time::now();
-    // cout << "Time ICP" << (T2 - T1).toSec() << endl;
     int count = 0;
     for(int i = 0; i < num_nodes-1; i++) {
         d = mahalanobis_distance(graph_t_.set_node_t[i], node_t);
         if(d <= 3) {
-            // cout << "d " << d << endl;
             count += 1;
             overlap_best = check_loop_closure(graph_t_.set_node_t[i], node_t);
             if(overlap_best) {
@@ -151,7 +147,14 @@ void detect_loop_closure(sl_graph_t& graph_t_) {
             }
         }
     }
-    T3 = ros::Time::now();
-    // cout << "Optimize" << (T3 - T2).toSec() << endl;
-    // cout << "Check" << count << endl;
+}
+
+void thread_func(sl_graph_t& graph_t_) {
+    loop_closure_detected = false;
+    detect_loop_closure(graph_t_);
+    if(loop_closure_detected) {
+        ROS_INFO("Optimizing...!");
+        optimization(graph_t_);
+        ROS_INFO("Optimization done!");
+    }
 }

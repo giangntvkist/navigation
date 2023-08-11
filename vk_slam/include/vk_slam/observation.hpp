@@ -132,6 +132,7 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
     int num_nodes = graph_t_.set_node_t.size();
     int num_cells = map_t.data.size();
     if(loop_closure_detected) {
+        ROS_INFO("Reloading map ...!");
         for (int i = 0; i < num_cells; i++) {
             log_map_t[i] = l_0;
         }

@@ -33,6 +33,7 @@
 #include <random>
 #include <fstream>
 #include <unistd.h>
+#include <boost/thread.hpp>
 
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
@@ -189,6 +190,7 @@ Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d&
 double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
 void optimization(sl_graph_t& graph_t_);
 void cov_func(sl_graph_t& graph_t_);
+void thread_func(sl_graph_t& graph_t_);
 
 void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
 void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);

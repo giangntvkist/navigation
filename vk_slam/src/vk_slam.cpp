@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~delta_theta", delta_theta)) delta_theta = 0.01;
 
     if(!ros::param::get("~min_cumulative_distance", min_cumulative_distance)) min_cumulative_distance = 5.0;
-    if(!ros::param::get("~match_rate_ICP", match_rate_ICP)) match_rate_ICP = 0.95;
+    if(!ros::param::get("~match_rate_ICP", match_rate_ICP)) match_rate_ICP = 0.9;
 
     if(!ros::param::get("~map_width", map_width)) map_width = 1000;
     if(!ros::param::get("~map_height", map_height)) map_height = 1000;
@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
     init_slam(log_map_t_, map, pose_graph);
     first_time = true;
     ros::Rate rate(map_update_interval);
+    ros::Time T1, T2, T3;
     while(ros::ok()) {
         ros::spinOnce();
         if(data_) {
@@ -114,17 +115,11 @@ int main(int argc, char **argv) {
 
                 /** Check loop closure*/
                 cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-                // cum_dist += fabs(angle_diff(u_t[1].v[2], u_t[0].v[2]));
-                loop_closure_detected = false;
                 if(cum_dist > min_cumulative_distance) {
-                // if(cum_dist > 2*M_PI) {
-                    detect_loop_closure(graph_t);
-                }
-                if(loop_closure_detected) {
-                    ROS_INFO("Optimizing...");
-                    optimization(graph_t);
+                    boost::thread th_optimization(thread_func, graph_t);
                 }
                 pose_robot_t = graph_t.set_node_t[idx_node].pose;
+                // boost::thread th_map(mapping, graph_t, log_map_t_, map, pose_graph);
                 mapping(graph_t, log_map_t_, map, pose_graph);
                 u_t[0] = odom_t;
             }

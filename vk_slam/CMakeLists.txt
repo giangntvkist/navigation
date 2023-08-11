@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
 )
+find_package(Boost REQUIRED COMPONENTS thread)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -123,6 +124,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -154,7 +156,7 @@ add_executable(vk_slam src/vk_slam.cpp)
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(vk_slam ${catkin_LIBRARIES} ${Eigen_INCLUDE_DRIS})
+target_link_libraries(vk_slam ${catkin_LIBRARIES} ${Eigen_INCLUDE_DRIS} Boost::thread)
 
 #############
 ## Install ##
