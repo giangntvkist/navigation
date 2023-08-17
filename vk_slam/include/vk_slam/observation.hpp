@@ -31,12 +31,14 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
     -1: un-known    0: free     100: occupied */
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t) {
     /** Lidar pose in map frame */
-    double x, y, x_cell, y_cell;
+    double x, y, theta, x_cell, y_cell;
     x = node_i.pose.v[0] + laser_pose_x*cos(node_i.pose.v[2]) - laser_pose_y*sin(node_i.pose.v[2]);
     y = node_i.pose.v[1] + laser_pose_x*sin(node_i.pose.v[2]) + laser_pose_y*cos(node_i.pose.v[2]);
+    theta = normalize(node_i.pose.v[2] + laser_pose_theta);
 
     double d, anpha, l_inv;
     int idx_cell;
+    double phi;
 
     int map_width, map_height;
     int num_beam = node_i.scan.ranges.size();
@@ -47,6 +49,7 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     map_width = map_t.info.width;
     map_height = map_t.info.height;
 
+    const int kernel = 90;
     int del_x, del_y, e;
     int id_x1, id_x2, id_y1, id_y2, id_x, id_y;
     int x_step, y_step, p1, p2;
@@ -82,11 +85,20 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
                 x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
                 y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
                 d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
-                if (d > min(range_max, node_i.scan.ranges[k].v[0] + map_resolution/2)) {
+                phi = atan2(y_cell - y, x_cell - x) - theta;
+                int k_min = k;
+                for(int j = k - kernel; j < k + kernel; j++) {
+                    if(j >= 0 && j < num_beam) {
+                        if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
+                            k_min = j;
+                        }
+                    }
+                }
+                if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
                     l_inv = l_0;
-                } else if (node_i.scan.ranges[k].v[0] < range_max && fabs(d - node_i.scan.ranges[k].v[0]) < map_resolution/2) {
+                } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
                     l_inv = l_occ;
-                } else if (d <= node_i.scan.ranges[k].v[0]) {
+                } else if (d <= node_i.scan.ranges[k_min].v[0]) {
                     l_inv = l_free;
                 }
                 if(idx_cell < map_t.data.size()) {
@@ -111,11 +123,20 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
                 x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
                 y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
                 d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
-                if (d > min(range_max, node_i.scan.ranges[k].v[0] + map_resolution/2)) {
+                phi = atan2(y_cell - y, x_cell - x) - theta;
+                int k_min = k;
+                for(int j = k - kernel; j < k + kernel; j++) {
+                    if(j >= 0 && j < num_beam) {
+                        if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
+                            k_min = j;
+                        }
+                    }
+                }
+                if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
                     l_inv = l_0;
-                } else if (node_i.scan.ranges[k].v[0] < range_max && fabs(d - node_i.scan.ranges[k].v[0]) < map_resolution/2) {
+                } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
                     l_inv = l_occ;
-                } else if (d <= node_i.scan.ranges[k].v[0]) {
+                } else if (d <= node_i.scan.ranges[k_min].v[0]) {
                     l_inv = l_free;
                 }
                 if(idx_cell < map_t.data.size()) {
@@ -128,10 +149,11 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     }
 }
 
-void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t) {
+void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t) {
+    mu.lock();
     int num_nodes = graph_t_.set_node_t.size();
     int num_cells = map_t.data.size();
-    if(loop_closure_detected) {
+    if(optimized) {
         ROS_INFO("Reloading map ...!");
         for (int i = 0; i < num_cells; i++) {
             log_map_t[i] = l_0;
@@ -151,18 +173,41 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
             map_t.data[i] = unknown;
         }
     }
-    map_pub.publish(map_t);
+    mu.unlock();
+}
 
-    geometry_msgs::PoseStamped p;
-    p.pose.position.x = graph_t_.set_node_t.back().pose.v[0];
-    p.pose.position.y = graph_t_.set_node_t.back().pose.v[1];
-    p.pose.position.z = 0.0;
-    pose_graph_t.poses.push_back(p);
-    pose_graph_pub.publish(pose_graph_t);
+void pose_graph_visualization(sl_graph_t& graph_t_) {
+    for (uint i = 0; i < Vertexs.size(); i++)
+    {
+        m.id = id;
+        m.pose.position.x = Vertexs[i](0);
+        m.pose.position.y = Vertexs[i](1);
+        marray.markers.push_back(visualization_msgs::Marker(m));
+        id++;
+    }
+
+    for(int i = 0; i < Edges.size();i++)
+    {
+        Edge tmpEdge = Edges[i];
+        edge.points.clear();
+
+        geometry_msgs::Point p;
+        p.x = Vertexs[tmpEdge.xi](0);
+        p.y = Vertexs[tmpEdge.xi](1);
+        edge.points.push_back(p);
+
+        p.x = Vertexs[tmpEdge.xj](0);
+        p.y = Vertexs[tmpEdge.xj](1);
+        edge.points.push_back(p);
+        edge.id = id;
+
+        marray.markers.push_back(visualization_msgs::Marker(edge));
+        id++;
+    }
 }
 
 /** Initial map and first node */
-void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t) {
+void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::MarkerArray& SetOfMarker, int color = 0) {
     map_t.header.frame_id = map_frame;
     map_t.info.resolution = map_resolution;
     map_t.info.width = map_width;
@@ -179,8 +224,55 @@ void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_ms
         log_map_t.push_back(l_0);
     }
 
-    pose_graph_t.header.frame_id = map_frame;
-    pose_graph_t.poses.clear();
+    /* Node color - red*/
+    visualization_msgs::Marker m;
+    m.header.frame_id = "map";
+    m.header.stamp = ros::Time::now();
+    m.action = visualization_msgs::Marker::ADD;
+    m.type = visualization_msgs::Marker::SPHERE;
+    m.id = 0;
+    m.pose.position.x = 0.0;
+    m.pose.position.y = 0.0;
+    m.pose.position.z = 0.0;
+    m.scale.x = 0.1;
+    m.scale.y = 0.1;
+    m.scale.z = 0.1;
+    if(color == 0)
+    {
+        m.color.r = 1.0;
+        m.color.g = 0.0;
+        m.color.b = 0.0;
+    } else {
+        m.color.r = 0.0;
+        m.color.g = 1.0;
+        m.color.b = 0.0;
+    }
+
+    m.color.a = 1.0;
+    m.lifetime = ros::Duration(0);
+
+    /* Edges - blue */
+    visualization_msgs::Marker edge;
+    edge.header.frame_id = "map";
+    edge.header.stamp = ros::Time::now();
+    edge.action = visualization_msgs::Marker::ADD;
+    edge.type = visualization_msgs::Marker::LINE_STRIP;
+    edge.id = 0;
+    edge.scale.x = 0.1;
+    edge.scale.y = 0.1;
+    edge.scale.z = 0.1;
+
+    if(color == 0)
+    {
+        edge.color.r = 0.0;
+        edge.color.g = 0.0;
+        edge.color.b = 1.0;
+    } else {
+        edge.color.r = 1.0;
+        edge.color.g = 0.0;
+        edge.color.b = 1.0;
+    }
+    edge.color.a = 1.0;
 }
 
 bool update_node(sl_vector_t u_t[2]) {

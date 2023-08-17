@@ -26,6 +26,9 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
+
 #include <vector>
 #include <iostream>
 #include <math.h>
@@ -137,6 +140,7 @@ bool first_time;
 bool inverted_laser;
 bool loop_closure_detected;
 bool overlap_best;
+bool optimized;
 
 int max_inter_ICP;
 double match_rate_ICP;
@@ -151,9 +155,9 @@ double map_resolution;
 double z_hit, sigma;
 double min_cumulative_distance;
 
-double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
+boost::mutex mu;
 
-ros::Publisher map_pub, pose_graph_pub;
+double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
 
 nav_msgs::Odometry odom;
 sl_scan_t scan_t;
@@ -190,7 +194,7 @@ Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d&
 double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
 void optimization(sl_graph_t& graph_t_);
 void cov_func(sl_graph_t& graph_t_);
-void thread_func(sl_graph_t& graph_t_);
+void thread_func(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
 
 void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
 void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);
@@ -209,6 +213,6 @@ void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& ed
 void detect_loop_closure(sl_graph_t& graph_t_);
 
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
-void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
+void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
 void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
 void printf_matrix(sl_matrix_t& A);

@@ -10,11 +10,11 @@ int main(int argc, char **argv) {
     ROS_INFO("Running vk_slam node!");
     ros::NodeHandle nh;
 
-    map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 1);
-    pose_graph_pub = nh.advertise<nav_msgs::Path>("pose_graph", 10);
+    ros::Publisher map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 1);
+    ros::Publisher pose_graph_pub = nh.advertise<visualization_msgs::MarkerArray>("nodes", 1);
 
-    message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odometry", 10);
-    message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub(nh, "scan_3", 10);
+    message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 10);
+    message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub(nh, "scan1", 10);
     typedef sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::LaserScan> MySyncPolicy;
     Synchronizer<MySyncPolicy> sync(MySyncPolicy(10),odom_sub, laser_scan_sub);
     sync.registerCallback(dataCallback);
@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
 
     nav_msgs::OccupancyGrid map;
     vector<double> log_map_t_;
-    nav_msgs::Path pose_graph;
+    visualization_msgs::MarkerArray SetOfMarker;
+    bool start_thread = false;
 
     sl_graph_t graph_t;
     sl_vector_t odom_t, odom_t_1;
@@ -74,10 +75,11 @@ int main(int argc, char **argv) {
     int idx_node;
     double cum_dist = 0;
     sl_vector_t trans;
+
     init_slam(log_map_t_, map, pose_graph);
     first_time = true;
     ros::Rate rate(map_update_interval);
-    ros::Time T1, T2, T3;
+
     while(ros::ok()) {
         ros::spinOnce();
         if(data_) {
@@ -94,7 +96,7 @@ int main(int argc, char **argv) {
                 idx_node = 0;
                 node_current.idx = idx_node;
                 graph_t.set_node_t.push_back(node_current);
-                mapping(graph_t, log_map_t_, map, pose_graph);
+                mapping(graph_t, log_map_t_, map);
                 odom_t_1 = odom_t;
                 u_t[0] = odom_t;
                 first_time = false;
@@ -115,14 +117,16 @@ int main(int argc, char **argv) {
 
                 /** Check loop closure*/
                 cum_dist += sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2));
-                if(cum_dist > min_cumulative_distance) {
-                    boost::thread th_optimization(thread_func, graph_t);
+                if(cum_dist > min_cumulative_distance && !start_thread) {
+                    start_thread = true;
+                    ROS_INFO("Checking loop closure!");
+                    boost::thread th_optimization(thread_func, graph_t, log_map_t_, map);
                 }
                 pose_robot_t = graph_t.set_node_t[idx_node].pose;
-                // boost::thread th_map(mapping, graph_t, log_map_t_, map, pose_graph);
-                mapping(graph_t, log_map_t_, map, pose_graph);
+                mapping(graph_t, log_map_t_, map);
                 u_t[0] = odom_t;
             }
+            map_pub.publish(map_t);
             odom_t_1 = odom_t;
         }
         rate.sleep();

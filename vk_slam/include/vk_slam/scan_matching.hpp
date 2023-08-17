@@ -155,14 +155,7 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij) {
         sum_e_k_1 = sum_e_k;
         count += 1;
     }
-    /* Caculate number of correspondence points */
-    // double a = z_hit/sqrt(2*M_PI*pow(sigma, 2));
-    // for(int i = 0; i < cores.size(); i++) {
-    //     if(cores[i].weight > 0.95*a) {
-    //         num_cores += 1;
-    //     }
-    // }
-    // cout << "count: " << count << " " << sum_e_k << " " << num_cores << endl;
+
     if(count == max_inter_ICP) {
         ROS_WARN("Scan matching failed!");
         trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);

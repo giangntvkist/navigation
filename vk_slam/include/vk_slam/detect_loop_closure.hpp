@@ -149,12 +149,27 @@ void detect_loop_closure(sl_graph_t& graph_t_) {
     }
 }
 
-void thread_func(sl_graph_t& graph_t_) {
-    loop_closure_detected = false;
-    detect_loop_closure(graph_t_);
-    if(loop_closure_detected) {
-        ROS_INFO("Optimizing...!");
-        optimization(graph_t_);
-        ROS_INFO("Optimization done!");
+// void thread_func(sl_graph_t& graph_t_) {
+//     loop_closure_detected = false;
+//     detect_loop_closure(graph_t_);
+//     if(loop_closure_detected) {
+//         ROS_INFO("Optimizing...!");
+//         optimization(graph_t_);
+//         ROS_INFO("Optimization done!");
+//     }
+// }
+
+void thread_func(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t) {
+    while(1) {
+        loop_closure_detected = false;
+        optimized = false;
+        detect_loop_closure(graph_t_);
+        if(loop_closure_detected) {
+            optimization(graph_t_);
+            ROS_INFO("Optimization done!");
+            if(optimized) {
+                mapping(graph_t_, log_map_t, map_t);
+            }
+        }
     }
 }
