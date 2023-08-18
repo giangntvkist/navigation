@@ -155,6 +155,7 @@ double map_resolution;
 double z_hit, sigma;
 double min_cumulative_distance;
 
+ros::Publisher map_pub, pose_graph_pub;
 boost::mutex mu;
 
 double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
@@ -212,7 +213,8 @@ double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j);
 void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
 void detect_loop_closure(sl_graph_t& graph_t_);
 
+void pose_graph_visualization(sl_graph_t& graph_t_, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker);
 void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
 void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
-void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, nav_msgs::Path& pose_graph_t);
+void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker, int color);
 void printf_matrix(sl_matrix_t& A);

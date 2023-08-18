@@ -49,7 +49,7 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     map_width = map_t.info.width;
     map_height = map_t.info.height;
 
-    const int kernel = 90;
+    const int kernel = 20;
     int del_x, del_y, e;
     int id_x1, id_x2, id_y1, id_y2, id_x, id_y;
     int x_step, y_step, p1, p2;
@@ -173,41 +173,47 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
             map_t.data[i] = unknown;
         }
     }
+    map_pub.publish(map_t);
     mu.unlock();
 }
 
-void pose_graph_visualization(sl_graph_t& graph_t_) {
-    for (uint i = 0; i < Vertexs.size(); i++)
-    {
-        m.id = id;
-        m.pose.position.x = Vertexs[i](0);
-        m.pose.position.y = Vertexs[i](1);
-        marray.markers.push_back(visualization_msgs::Marker(m));
+void pose_graph_visualization(sl_graph_t& graph_t_, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker) {
+    int num_nodes = graph_t_.set_node_t.size();
+    int num_edges = graph_t_.set_edge_t.size();
+    int id = 0;
+    SetOfMarker.markers.clear();
+    for(int i = 0; i < num_nodes; i++) {
+        node.id = id;
+        node.pose.position.x = graph_t_.set_node_t[i].pose.v[0];
+        node.pose.position.y = graph_t_.set_node_t[i].pose.v[1];
+        SetOfMarker.markers.push_back(node);
         id++;
     }
-
-    for(int i = 0; i < Edges.size();i++)
-    {
-        Edge tmpEdge = Edges[i];
-        edge.points.clear();
-
-        geometry_msgs::Point p;
-        p.x = Vertexs[tmpEdge.xi](0);
-        p.y = Vertexs[tmpEdge.xi](1);
-        edge.points.push_back(p);
-
-        p.x = Vertexs[tmpEdge.xj](0);
-        p.y = Vertexs[tmpEdge.xj](1);
-        edge.points.push_back(p);
+    
+    int id_i, id_j; // Edge ij
+    for(int j = 0; j < num_edges; j++) {
         edge.id = id;
+        edge.points.clear();
+        geometry_msgs::Point p;
 
-        marray.markers.push_back(visualization_msgs::Marker(edge));
+        id_i = graph_t_.set_edge_t[j].i;
+        id_j = graph_t_.set_edge_t[j].j;
+
+        p.x = graph_t_.set_node_t[id_i].pose.v[0];
+        p.y = graph_t_.set_node_t[id_i].pose.v[1];
+        edge.points.push_back(p);
+
+        p.x = graph_t_.set_node_t[id_j].pose.v[0];
+        p.y = graph_t_.set_node_t[id_j].pose.v[1];
+        edge.points.push_back(p);
+        SetOfMarker.markers.push_back(edge);
         id++;
     }
+    pose_graph_pub.publish(SetOfMarker);
 }
 
 /** Initial map and first node */
-void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::MarkerArray& SetOfMarker, int color = 0) {
+void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker, int color) {
     map_t.header.frame_id = map_frame;
     map_t.info.resolution = map_resolution;
     map_t.info.width = map_width;
@@ -225,43 +231,48 @@ void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visual
     }
 
     /* Node color - red*/
-    visualization_msgs::Marker m;
-    m.header.frame_id = "map";
-    m.header.stamp = ros::Time::now();
-    m.action = visualization_msgs::Marker::ADD;
-    m.type = visualization_msgs::Marker::SPHERE;
-    m.id = 0;
-    m.pose.position.x = 0.0;
-    m.pose.position.y = 0.0;
-    m.pose.position.z = 0.0;
-    m.scale.x = 0.1;
-    m.scale.y = 0.1;
-    m.scale.z = 0.1;
+    node.header.frame_id = "map";
+    node.header.stamp = ros::Time::now();
+    node.action = visualization_msgs::Marker::ADD;
+    node.type = visualization_msgs::Marker::SPHERE;
+    node.id = 0;
+    node.ns = "vk_slam_node";
+    node.scale.x = 0.1;
+    node.scale.y = 0.1;
+    node.scale.z = 0.1;
+    node.pose.orientation.x = 0;
+    node.pose.orientation.y = 0;
+    node.pose.orientation.z = 0.0;
+    node.pose.orientation.w = 1.0;
     if(color == 0)
     {
-        m.color.r = 1.0;
-        m.color.g = 0.0;
-        m.color.b = 0.0;
+        node.color.r = 1.0;
+        node.color.g = 0.0;
+        node.color.b = 0.0;
     } else {
-        m.color.r = 0.0;
-        m.color.g = 1.0;
-        m.color.b = 0.0;
+        node.color.r = 0.0;
+        node.color.g = 1.0;
+        node.color.b = 0.0;
     }
 
-    m.color.a = 1.0;
-    m.lifetime = ros::Duration(0);
+    node.color.a = 1.0;
+    node.lifetime = ros::Duration(0);
 
     /* Edges - blue */
-    visualization_msgs::Marker edge;
     edge.header.frame_id = "map";
     edge.header.stamp = ros::Time::now();
     edge.action = visualization_msgs::Marker::ADD;
     edge.type = visualization_msgs::Marker::LINE_STRIP;
     edge.id = 0;
-    edge.scale.x = 0.1;
-    edge.scale.y = 0.1;
-    edge.scale.z = 0.1;
+    edge.scale.x = 0.02;
+    edge.scale.y = 0.02;
+    edge.scale.z = 0.02;
+    edge.ns = "vk_slam_edge";
 
+    edge.pose.orientation.x = 0;
+    edge.pose.orientation.y = 0;
+    edge.pose.orientation.z = 0.0;
+    edge.pose.orientation.w = 1.0;
     if(color == 0)
     {
         edge.color.r = 0.0;
@@ -273,6 +284,7 @@ void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visual
         edge.color.b = 1.0;
     }
     edge.color.a = 1.0;
+    edge.lifetime = ros::Duration(0);
 }
 
 bool update_node(sl_vector_t u_t[2]) {

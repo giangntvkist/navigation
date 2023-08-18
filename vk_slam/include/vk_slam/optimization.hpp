@@ -219,6 +219,7 @@ void optimization(sl_graph_t& graph_t_) {
         }
     }
     if(!failed) {
+        optimized = true;
         for(int k = 0; k < 3*num_nodes; k++) {
             int i = k/3;
             int j = k%3; 

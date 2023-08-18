@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
     ROS_INFO("Running vk_slam node!");
     ros::NodeHandle nh;
 
-    ros::Publisher map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 1);
-    ros::Publisher pose_graph_pub = nh.advertise<visualization_msgs::MarkerArray>("nodes", 1);
+    map_pub = nh.advertise<nav_msgs::OccupancyGrid>("map", 1);
+    pose_graph_pub = nh.advertise<visualization_msgs::MarkerArray>("pose_graph", 1);
 
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 10);
     message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub(nh, "scan1", 10);
@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
 
     nav_msgs::OccupancyGrid map;
     vector<double> log_map_t_;
+
+    visualization_msgs::Marker node, edge;
     visualization_msgs::MarkerArray SetOfMarker;
     bool start_thread = false;
 
@@ -76,7 +78,7 @@ int main(int argc, char **argv) {
     double cum_dist = 0;
     sl_vector_t trans;
 
-    init_slam(log_map_t_, map, pose_graph);
+    init_slam(log_map_t_, map, node, edge, SetOfMarker, 0);
     first_time = true;
     ros::Rate rate(map_update_interval);
 
@@ -124,9 +126,9 @@ int main(int argc, char **argv) {
                 }
                 pose_robot_t = graph_t.set_node_t[idx_node].pose;
                 mapping(graph_t, log_map_t_, map);
+                pose_graph_visualization(graph_t, node, edge, SetOfMarker);
                 u_t[0] = odom_t;
             }
-            map_pub.publish(map_t);
             odom_t_1 = odom_t;
         }
         rate.sleep();
