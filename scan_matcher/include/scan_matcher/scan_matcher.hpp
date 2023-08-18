@@ -71,7 +71,7 @@ struct sm_point_cloud_t {
 
 #define omni 0
 #define diff 1
-#define inf 1e4
+#define INF 1e4
 #define un_valid -1
 
 bool data_, map_;
@@ -83,7 +83,7 @@ nav_msgs::OccupancyGrid occ_map;
 sensor_msgs::PointCloud point_cloud_t;
 nav_msgs::Odometry odom;
 
-ros::Publisher robot_pose_pub, lase_scan_pub;
+ros::Publisher robot_pose_pub, laser_scan_pub;
 ros::Subscriber map_sub;
 
 inline double normalize(double z) {
