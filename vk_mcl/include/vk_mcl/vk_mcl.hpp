@@ -68,6 +68,7 @@ nav_msgs::OccupancyGrid map_t;
 pf_scan_t scan_t;
 pf_vector_t odom;
 vector<double> map_dist_t;
+pf_scan_t ls_scan_t;
 
 bool map_data = false, sensor_data = false;
 bool first_time = true, error = false;

@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     ros::Publisher point_cloud_pub = nh.advertise<sensor_msgs::PointCloud>("point_cloud", 2);
     
     ros::Subscriber map_sub = nh.subscribe("map", 1, mapCallback);
-    ros::Subscriber init_pose_sub = nh.subscribe("initial_pose", 1, init_poseCallback);
+    ros::Subscriber init_pose_sub = nh.subscribe("initialpose", 1, init_poseCallback);
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 5);
     message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub(nh, "scan1", 2);
     typedef sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::LaserScan> MySyncPolicy;
@@ -89,13 +89,14 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~lookup_table_path", lookup_table_path)) lookup_table_path = "";
     if(!ros::param::get("~last_pose_path", last_pose_path)) last_pose_path = "";
     if(!ros::param::get("~save_last_pose", save_last_pose)) save_last_pose = false;
-    if(!ros::param::get("~set_init_pose", set_init_pose)) set_init_pose = true;
+    if(!ros::param::get("~set_init_pose", set_init_pose)) set_init_pose = false;
 
     if(!ros::param::get("~inverse_laser", inverse_laser)) inverse_laser = true;
     if(!ros::param::get("~agumented_mcl", agumented_mcl)) agumented_mcl = true;
 
     if(!ros::param::get("~base_frame", base_frame)) base_frame = "base_link";
     if(!ros::param::get("~map_frame", map_frame)) map_frame = "map";
+    if(!ros::param::get("~base_scan_frame", base_scan_frame)) base_scan_frame = "base_scan";
     if(!ros::param::get("~entropy", entropy)) entropy = false;
 
     pf_set_sample_t S_t_1, S_t;
@@ -158,10 +159,11 @@ int main(int argc, char **argv) {
                 update_motion(u_t_w, S_t);
             }
             if(entropy) computeEntropy(S_t);
-            mcl_publisher(hypoth_pose_t, lz_pose, pcl_t, S_t, laser_pose, scan_t, map_t);
+            mcl_publisher(hypoth_pose_t, lz_pose, pcl_t, S_t, laser_pose, ls_scan_t, map_t);
             particlecloud_pub.publish(hypoth_pose_t);
             amcl_pose_pub.publish(lz_pose);
             point_cloud_pub.publish(pcl_t);
+
             odom_t_1 = odom_t;
         }
         rate.sleep();

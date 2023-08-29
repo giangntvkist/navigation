@@ -178,6 +178,7 @@ double computeEntropy(pf_set_sample_t& S_t) {
 void mcl_publisher(geometry_msgs::PoseArray& pose_arr, geometry_msgs::PoseWithCovarianceStamped& q_t, sensor_msgs::PointCloud& pcl, 
     pf_set_sample_t& s, pf_vector_t laser_pose, pf_scan_t& scan, nav_msgs::OccupancyGrid& map) {
     /* Robot pose publisher */
+    q_t.header.stamp = ros::Time::now();
     q_t.header.frame_id = map_frame;
     q_t.pose.pose.position.x = s.mean.v[0];
     q_t.pose.pose.position.y = s.mean.v[1];
@@ -192,9 +193,7 @@ void mcl_publisher(geometry_msgs::PoseArray& pose_arr, geometry_msgs::PoseWithCo
         ofstream last_pose_file;
         last_pose_file.open(last_pose_path, std::ofstream::out | std::ofstream::trunc);
         if(last_pose_file.is_open()) {
-            ROS_INFO("Saving last pose!");
             last_pose_file << q_t.pose.pose.position.x << " " << q_t.pose.pose.position.y << " " << tf::getYaw(q_t.pose.pose.orientation);
-            ROS_INFO("Saved!");
         }else {
             ROS_ERROR("Last pose file can't open!");
             error = true;

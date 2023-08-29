@@ -35,6 +35,13 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
         r.v[1] = inv_scan*(i*angle_increment + angle_min);
         scan_t.ranges.push_back(r);
     }
+
+    ls_scan_t.ranges.clear();
+    for(int i = 0; i < max_beams; i++) {
+        r.v[0] = scan.ranges[i];
+        r.v[1] = inv_scan*(i*angle_increment + angle_min);
+        ls_scan_t.ranges.push_back(r);
+    }
     sensor_data = true;
 }
 
@@ -44,6 +51,7 @@ void init_poseCallback(const geometry_msgs::PoseWithCovarianceStamped& msg) {
     init_pose_y = msg.pose.pose.position.y;
     init_pose_theta = tf::getYaw(msg.pose.pose.orientation);
     init_sample = true;
+    set_init_pose = true;
 }
 
 bool map_valid(int idx, int idy, nav_msgs::OccupancyGrid& map) {

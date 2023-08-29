@@ -42,4 +42,4 @@ bool agumented_mcl;
 bool entropy;
 
 string lookup_table_path, last_pose_path;
-string base_frame, map_frame;
+string base_frame, map_frame, base_scan_frame;

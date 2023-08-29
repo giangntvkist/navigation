@@ -139,7 +139,7 @@ pf_vector_t motion_model(pf_vector_t u_t[2], pf_vector_t q_t_1) {
 
                 q_t.v[0] = q_t_1.v[0] + delta_trans_hat*cos(delta_bearing) + delta_strafe_hat*sin(delta_bearing);
                 q_t.v[1] = q_t_1.v[1] + delta_trans_hat*sin(delta_bearing) + delta_strafe_hat*cos(delta_bearing);
-                q_t.v[2] = normalize(q_t_1.v[2] + delta_rot_hat);
+                q_t.v[2] = q_t_1.v[2] + delta_rot_hat;
                 break;
             }
         case diff:
@@ -200,7 +200,7 @@ void update_motion(pf_vector_t u_t[2], pf_set_sample_t& s) {
                     delta_bearing = angle_diff(atan2(u_t[1].v[1] - u_t[0].v[1], u_t[1].v[0] - u_t[0].v[0]), u_t[0].v[2]) + s.samples[i].pose.v[2];
                     s.samples[i].pose.v[0] +=  delta_trans*cos(delta_bearing);
                     s.samples[i].pose.v[1] +=  delta_trans*sin(delta_bearing);
-                    s.samples[i].pose.v[2] = normalize(s.samples[i].pose.v[2] + delta_rot);
+                    s.samples[i].pose.v[2] += delta_rot;
                 }
                 break;
             }
@@ -217,7 +217,7 @@ void update_motion(pf_vector_t u_t[2], pf_set_sample_t& s) {
             for(int i = 0; i < s.samples.size(); i++) {
                 s.samples[i].pose.v[0] +=  delta_trans*cos(s.samples[i].pose.v[2] + delta_rot1);
                 s.samples[i].pose.v[1] +=  delta_trans*sin(s.samples[i].pose.v[2] + delta_rot1);
-                s.samples[i].pose.v[2] = normalize(s.samples[i].pose.v[2] + delta_rot1 + delta_rot2);
+                s.samples[i].pose.v[2] += delta_rot1 + delta_rot2;
             }
             break;
         }
