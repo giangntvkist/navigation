@@ -42,7 +42,7 @@ void lookuptable(nav_msgs::OccupancyGrid& map) {
     ROS_INFO("Waiting for get the lookup table...");
     int idx, idy;
     double d_min;
-    int kernel_size = max_occ_dist/map.info.resolution;
+    int kernel_size = 3;
     distance_map.clear();
     distance_map.resize(map.data.size());
     int map_size = map.data.size();
