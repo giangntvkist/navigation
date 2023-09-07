@@ -4,7 +4,6 @@
 #include "vk_slam/scan_matching.hpp"
 #include "vk_slam/detect_loop_closure.hpp"
 
-
 int main(int argc, char **argv) {
     ros::init(argc, argv, "vk_slam");
     ROS_INFO("Running vk_slam node!");
@@ -37,13 +36,12 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~init_pose_theta", init_pose_theta)) init_pose_theta = 0.0;
 
     if(!ros::param::get("~max_inter", max_inter)) max_inter = 100;
-    if(!ros::param::get("~converged_graph", converged_graph)) converged_graph = 2e-4;
-    if(!ros::param::get("~max_inter_ICP", max_inter_ICP)) max_inter_ICP = 100;
     if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 10;
 
     if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.3;
     if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.3;
     if(!ros::param::get("~z_hit", z_hit)) z_hit = 1.0;
+    if(!ros::param::get("~z_rand", z_rand)) z_rand = 0.05;
     if(!ros::param::get("~sigma", sigma)) sigma = 0.05;
 
     if(!ros::param::get("~delta_x", delta_x)) delta_x = 0.02;
@@ -51,7 +49,7 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~delta_theta", delta_theta)) delta_theta = 0.01;
 
     if(!ros::param::get("~min_cumulative_distance", min_cumulative_distance)) min_cumulative_distance = 5.0;
-    if(!ros::param::get("~match_rate_ICP", match_rate_ICP)) match_rate_ICP = 0.9;
+    if(!ros::param::get("~match_rate_ICP", match_rate)) match_rate = 0.9;
 
     if(!ros::param::get("~map_width", map_width)) map_width = 1000;
     if(!ros::param::get("~map_height", map_height)) map_height = 1000;

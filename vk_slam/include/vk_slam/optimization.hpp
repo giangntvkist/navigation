@@ -116,7 +116,7 @@ void optimization(sl_graph_t& graph_t_) {
     double eps = inf;
     cvl_k = inf;
     int num_inter = 0;
-    while(fabs(eps) > converged_graph && num_inter < max_inter) {
+    while(fabs(eps) > 2e-4 && num_inter < max_inter) {
         b.setZero();
         H.setZero();
         for(int k = 0; k < num_nodes; k++) {

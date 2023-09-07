@@ -141,18 +141,15 @@ bool inverted_laser;
 bool loop_closure_detected;
 bool overlap_best;
 bool optimized;
-
-int max_inter_ICP;
-double match_rate_ICP;
+double match_rate;
 
 int max_inter;
-double converged_graph;
 double map_update_interval;
 
 double min_trans, min_rot;
 int map_width, map_height;
 double map_resolution;
-double z_hit, sigma;
+double z_hit, z_rand, sigma;
 double min_cumulative_distance;
 
 ros::Publisher map_pub, pose_graph_pub;

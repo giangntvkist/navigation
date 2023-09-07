@@ -8,7 +8,7 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
     sl_point_cloud_t pcl_ref, pcl_cur;
     compute_points(node_i, pcl_ref);
     compute_points(node_j, pcl_cur);
-    int num_point = pcl_cur.pcl.size();
+    
     sl_vector_t mean_ref, mean_cur;
     sl_vector_t trans;
     trans.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);
@@ -22,13 +22,12 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
 
     double H[2][2];
     int count, num_cores;
-    count = 0;
     double sum_e_k, sum_e_k_1, eps;
     sum_e_k_1 = inf; eps = inf;
     count = 0; num_cores = 0;
     double a = z_hit/sqrt(2*M_PI*pow(sigma, 2));
     transform_pcl(pcl_cur, pcl_cur_w, trans);
-    while(fabs(eps) > 1e-3 && count < 0.2*max_inter_ICP) {
+    while(fabs(eps) > 2e-4 && count < max_inter) {
         get_correspondences(pcl_ref, pcl_cur_w, cores);
         compute_cov_mean_ICP(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {
@@ -45,6 +44,9 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
         trans.v[0] = mean_ref.v[0] - (mean_cur.v[0]*cos(trans.v[2]) - mean_cur.v[1]*sin(trans.v[2]));
         trans.v[1] = mean_ref.v[1] - (mean_cur.v[0]*sin(trans.v[2]) + mean_cur.v[1]*cos(trans.v[2]));
         transform_pcl(pcl_cur, pcl_cur_w, trans);
+        sum_e_k = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores);
+        eps = sum_e_k - sum_e_k_1;
+        sum_e_k_1 = sum_e_k;
         count += 1;
     }
     for(int i = 0; i < cores.size(); i++) {
@@ -52,8 +54,7 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j) {
             num_cores += 1;
         }
     }
-    // cout << "match:" << (double)num_cores/pcl_cur.pcl.size()<< endl;
-    if((double)num_cores/pcl_cur.pcl.size() >= match_rate_ICP) {
+    if((double)num_cores/pcl_cur.pcl.size() >= match_rate) {
         return true;
     }
     return false;
@@ -96,7 +97,7 @@ void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& ed
     sum_e_k_1 = inf; eps = inf;
     count = 0; num_cores = 0;
     transform_pcl(pcl_cur, pcl_cur_w, trans);
-    while(fabs(eps) > 2e-4 && count < max_inter_ICP) {
+    while(fabs(eps) > 2e-4 && count < max_inter) {
         get_correspondences(pcl_ref, pcl_cur_w, cores);
         compute_cov_mean_ICP(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {

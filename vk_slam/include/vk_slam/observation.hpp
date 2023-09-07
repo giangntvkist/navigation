@@ -34,7 +34,7 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     double x, y, theta, x_cell, y_cell;
     x = node_i.pose.v[0] + laser_pose_x*cos(node_i.pose.v[2]) - laser_pose_y*sin(node_i.pose.v[2]);
     y = node_i.pose.v[1] + laser_pose_x*sin(node_i.pose.v[2]) + laser_pose_y*cos(node_i.pose.v[2]);
-    theta = normalize(node_i.pose.v[2] + laser_pose_theta);
+    theta = node_i.pose.v[2] + laser_pose_theta;
 
     double d, anpha, l_inv;
     int idx_cell;
@@ -56,7 +56,7 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     id_x1 = (x - x_offset)/map_resolution + 1;
     id_y1 = (y - y_offset)/map_resolution + 1;
     for(int k = 0; k < num_beam; k ++) {
-        anpha = node_i.scan.ranges[k].v[1] + node_i.pose.v[2] + laser_pose_theta;
+        anpha = node_i.scan.ranges[k].v[1] + theta;
         id_x2 = (x + node_i.scan.ranges[k].v[0]*cos(anpha) - x_offset)/map_resolution + 1;
         id_y2 = (y + node_i.scan.ranges[k].v[0]*sin(anpha) - y_offset)/map_resolution + 1;
 
@@ -300,7 +300,8 @@ void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t) {
         /* Update current robot pose */
         q_t.v[0] += delta_trans*cos(delta_bearing);
         q_t.v[1] += delta_trans*sin(delta_bearing);
-        q_t.v[2] = normalize(q_t.v[2] + delta_rot);
+        q_t.v[2] += delta_rot;
+        q_t.v[2] = normalize(q_t.v[2]);
     }else if(model_type == diff) {
         double delta_trans, delta_rot1, delta_rot2;
         if(sqrt(pow(u_t[1].v[0] - u_t[0].v[0], 2) + pow(u_t[1].v[1] - u_t[0].v[1], 2)) < 0.01) {
@@ -313,7 +314,8 @@ void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t) {
         /* Update current robot pose */
         q_t.v[0] += delta_trans*cos(q_t.v[2] + delta_rot1);
         q_t.v[1] += delta_trans*sin(q_t.v[2] + delta_rot1);
-        q_t.v[2] = normalize(q_t.v[2] + delta_rot1 + delta_rot2);
+        q_t.v[2] += delta_rot1 + delta_rot2;
+        q_t.v[2] = normalize(q_t.v[2]);
     }
 }
 
