@@ -113,10 +113,10 @@ void optimization(sl_graph_t& graph_t_) {
         x(k) = graph_t_.set_node_t[i].pose.v[j];
     }
     double cvl_k, cvl_k_1;
-    double eps = inf;
-    cvl_k = inf;
+    double eps = my_inf;
+    cvl_k = my_inf;
     int num_inter = 0;
-    while(fabs(eps) > 2e-4 && num_inter < max_inter) {
+    while(fabs(eps) > 1e-4 && num_inter < max_inter) {
         b.setZero();
         H.setZero();
         for(int k = 0; k < num_nodes; k++) {
@@ -226,7 +226,6 @@ void optimization(sl_graph_t& graph_t_) {
             graph_t_.set_node_t[i].pose.v[j] = x(k);
         }
     }
-    // cout << " x " << x << endl;
 }
 
 void cov_func(sl_graph_t& graph_t_) {

@@ -5,6 +5,28 @@ bool scan_valid(double z) {
     return z < range_max && z >= range_min;
 }
 
+bool map_valid(int idx, int idy, nav_msgs::OccupancyGrid& map_t) {
+    return (idx >=0 && idx < map_t.info.width && idy >= 0 && idy < map_t.info.height);
+}
+
+double normalize(double z) {
+    return atan2(sin(z), cos(z));
+}
+
+double angle_diff(double a, double b) {
+    double d1, d2;
+    a = normalize(a);
+    b = normalize(b);
+    d1 = a - b;
+    d2 = 2*M_PI - fabs(d1);
+    if(d1 > 0) d2 *= -1.0;
+    if(fabs(d1) < fabs(d2)) {
+        return d1;
+    }else {
+        return d2;
+    }
+}
+
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan) {
     scan_t.ranges.clear();
     sl_vector_t ray_i;
@@ -21,10 +43,10 @@ void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& s
             scan_t.ranges.push_back(ray_i);
         } 
     }
-    odom.pose.pose.position.x = msg.pose.pose.position.x;
-    odom.pose.pose.position.y = msg.pose.pose.position.y;
-    odom.pose.pose.orientation = msg.pose.pose.orientation;
-    data_ = true;
+    odom.v[0] = msg.pose.pose.position.x;
+    odom.v[1] = msg.pose.pose.position.y;
+    odom.v[2] = tf::getYaw(msg.pose.pose.orientation);
+    sensor_data = true;
 }
 
 /** Occupancy grid map - using Bresenham's Line Drawing Algorithm
@@ -49,14 +71,14 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     map_width = map_t.info.width;
     map_height = map_t.info.height;
 
-    const int kernel = 20;
+    const int kernel = 50;
     int del_x, del_y, e;
     int id_x1, id_x2, id_y1, id_y2, id_x, id_y;
     int x_step, y_step, p1, p2;
     id_x1 = (x - x_offset)/map_resolution + 1;
     id_y1 = (y - y_offset)/map_resolution + 1;
     for(int k = 0; k < num_beam; k ++) {
-        anpha = node_i.scan.ranges[k].v[1] + theta;
+        anpha = node_i.scan.ranges[k].v[1] + node_i.pose.v[2] + laser_pose_theta;
         id_x2 = (x + node_i.scan.ranges[k].v[0]*cos(anpha) - x_offset)/map_resolution + 1;
         id_y2 = (y + node_i.scan.ranges[k].v[0]*sin(anpha) - y_offset)/map_resolution + 1;
 
@@ -149,9 +171,9 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     }
 }
 
-void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t) {
+void mapping(sl_graph_t& graph_t, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t) {
     mu.lock();
-    int num_nodes = graph_t_.set_node_t.size();
+    int num_nodes = graph_t.set_node_t.size();
     int num_cells = map_t.data.size();
     if(optimized) {
         ROS_INFO("Reloading map ...!");
@@ -159,10 +181,10 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
             log_map_t[i] = l_0;
         }
         for(int i = 0; i < num_nodes; i++) {
-            ray_tracing(graph_t_.set_node_t[i], map_t, log_map_t);
+            ray_tracing(graph_t.set_node_t[i], map_t, log_map_t);
         }
     }else {
-        ray_tracing(graph_t_.set_node_t.back(), map_t, log_map_t);
+        ray_tracing(graph_t.set_node_t.back(), map_t, log_map_t);
     }
     for(int i = 0; i < num_cells; i++) {
         if (exp(log_map_t[i]) <= 0.333) {
@@ -177,34 +199,34 @@ void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::Occupanc
     mu.unlock();
 }
 
-void pose_graph_visualization(sl_graph_t& graph_t_, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker) {
-    int num_nodes = graph_t_.set_node_t.size();
-    int num_edges = graph_t_.set_edge_t.size();
+void pose_graph_visualization(sl_graph_t& graph_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker) {
+    int num_nodes = graph_t.set_node_t.size();
+    int num_edges = graph_t.set_edge_t.size();
     int id = 0;
     SetOfMarker.markers.clear();
     for(int i = 0; i < num_nodes; i++) {
         node.id = id;
-        node.pose.position.x = graph_t_.set_node_t[i].pose.v[0];
-        node.pose.position.y = graph_t_.set_node_t[i].pose.v[1];
+        node.pose.position.x = graph_t.set_node_t[i].pose.v[0];
+        node.pose.position.y = graph_t.set_node_t[i].pose.v[1];
         SetOfMarker.markers.push_back(node);
         id++;
     }
     
-    int id_i, id_j; // Edge ij
+    int id_i, id_j;
     for(int j = 0; j < num_edges; j++) {
         edge.id = id;
         edge.points.clear();
         geometry_msgs::Point p;
 
-        id_i = graph_t_.set_edge_t[j].i;
-        id_j = graph_t_.set_edge_t[j].j;
+        id_i = graph_t.set_edge_t[j].i;
+        id_j = graph_t.set_edge_t[j].j;
 
-        p.x = graph_t_.set_node_t[id_i].pose.v[0];
-        p.y = graph_t_.set_node_t[id_i].pose.v[1];
+        p.x = graph_t.set_node_t[id_i].pose.v[0];
+        p.y = graph_t.set_node_t[id_i].pose.v[1];
         edge.points.push_back(p);
 
-        p.x = graph_t_.set_node_t[id_j].pose.v[0];
-        p.y = graph_t_.set_node_t[id_j].pose.v[1];
+        p.x = graph_t.set_node_t[id_j].pose.v[0];
+        p.y = graph_t.set_node_t[id_j].pose.v[1];
         edge.points.push_back(p);
         SetOfMarker.markers.push_back(edge);
         id++;
@@ -329,24 +351,3 @@ void printf_matrix(sl_matrix_t& A) {
     }
     cout << "]" << endl;
 }
-
-/* Trimming ICP */
-// double gold_rate(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores) {
-//     double s_min = 0.4, s_max = 1.0;
-//     double s1, s2, f1, f2;
-//     double phi = (sqrt(5) - 1)/2;
-//     int lamda = 2;
-//     s1 = s_max - phi*(s_max - s_min); s2 = s_min + phi*(s_max - s_min);
-//     while(fabs(s_max - s_min) > 1e-3) {
-//         f1 = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores, s1)/(pow(s1, 1+lamda));
-//         f2 = compute_sum_error_ICP(pcl_ref, pcl_cur_w, cores, s2)/(pow(s2, 1+lamda));
-//         if(f1 < f2) {
-//             s_max = s2;
-//         }else {
-//             s_min = s1;
-//         }
-//         s1 = s_max - phi*(s_max - s_min);
-//         s2 = s_min + phi*(s_max - s_min);
-//     }
-//     return (s_min + s_max)/2;
-// }

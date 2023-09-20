@@ -61,13 +61,8 @@ struct sl_matrix_t {
 
 struct sl_corr_t {
 	int i;
-	/** Closest point in the other scan. */
-	int j1;
-	/** Second closest point in the other scan. */
-	int j2;
-    /** Squared distance from p(i) to point j1 */
-	double dist2_j1;
-    double weight;
+	int j;
+	double dist2;
 };
 
 /* Define laser scan data: distance data & ray angle*/
@@ -111,107 +106,78 @@ struct sl_graph_t {
 
 #define omni 0
 #define diff 1
-#define inf 1e4
+#define my_inf 1e4
 #define un_valid -1
 int model_type; /* Type of model robot: differential or omnidirectional robot */
 
-double range_min;
-double range_max;
-double angle_increment;
-double angle_min;
-double angle_max;
-
-double laser_pose_x;
-double laser_pose_y;
-double laser_pose_theta;
-
-double init_pose_x;
-double init_pose_y;
-double init_pose_theta;
-
-int throttle_scan;
-
-string map_frame;
-string base_frame;
-string odom_frame;
-
-bool data_ = false;
-bool first_time;
-bool inverted_laser;
-bool loop_closure_detected;
-bool overlap_best;
-bool optimized;
-double match_rate;
-
-int max_inter;
-double map_update_interval;
+double range_min, range_max, angle_increment, angle_min, angle_max;
+double laser_pose_x, laser_pose_y, laser_pose_theta;
+double init_pose_x, init_pose_y, init_pose_theta;
 
 double min_trans, min_rot;
-int map_width, map_height;
-double map_resolution;
-double z_hit, z_rand, sigma;
-double min_cumulative_distance;
+double map_width, map_height, map_resolution;
+double map_update_interval;
+int max_inter, kernel_size;
+double dist_threshold;
+
+double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
+
+int throttle_scan;
+string map_frame, base_frame, odom_frame;
+
+bool sensor_data, map_data;
+bool first_time;
+bool inverted_laser;
+
+bool loop_closure_detected;
+bool overlap_best;
+double match_rate, min_cumulative_distance;
+bool optimized;
+
+sl_scan_t scan_t;
+sl_vector_t odom;
 
 ros::Publisher map_pub, pose_graph_pub;
 boost::mutex mu;
 
-double delta_x, delta_y, delta_theta; /* Using for calculating approximate Hessian matrix */
-
-nav_msgs::Odometry odom;
-sl_scan_t scan_t;
-
-inline double normalize(double z) {
-    return atan2(sin(z), cos(z));
-}
-
-inline double angle_diff(double a, double b) {
-    double d1, d2;
-    a = normalize(a);
-    b = normalize(b);
-    d1 = a - b;
-    d2 = 2*M_PI - fabs(d1);
-    if(d1 > 0) d2 *= -1.0;
-    if(fabs(d1) < fabs(d2)) {
-        return d1;
-    }else {
-        return d2;
-    }
-}
-
-// bool compare(const sl_corr_t& a, sl_corr_t& b){
-//    return a.dist2_j1 < b.dist2_j1;
-// }
-
 bool scan_valid(double z);
+bool map_valid(int idx, int idy, nav_msgs::OccupancyGrid& map_t);
+double normalize(double z);
+double angle_diff(double a, double b);
 void dataCallback(const nav_msgs::Odometry& msg, const sensor_msgs::LaserScan& scan);
-bool update_node(sl_vector_t u_t[2]);
-void update_motion(sl_vector_t u_t[2]);
 
-Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
-double cost_func(vector<sl_edge_t>& edge_t_, Eigen::VectorXd& x);
-void optimization(sl_graph_t& graph_t_);
-void cov_func(sl_graph_t& graph_t_);
-void thread_func(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
+void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
+void mapping(sl_graph_t& graph_t, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
+void pose_graph_visualization(sl_graph_t& graph_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker);
+void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker, int color);
+bool update_node(sl_vector_t u_t[2]);
+void update_motion(sl_vector_t u_t[2], sl_vector_t& q_t);
+void printf_matrix(sl_matrix_t& A);
 
 void compute_points(sl_node_t& node_i, sl_point_cloud_t& pcl_cur);
 void transform_pcl(sl_point_cloud_t& pcl_cur, sl_point_cloud_t& pcl_cur_w, sl_vector_t& trans);
-void get_correspondences(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
-// double gold_rate(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
-void compute_cov_mean_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores,
+double norm2(sl_vector_t& p, sl_vector_t& q);
+void correspondences(sl_point_cloud_t& pcl_cur_w, nav_msgs::OccupancyGrid& map_t, vector<sl_corr_t>& cores);
+void compute_cov_mean_ICP(sl_point_cloud_t& pcl_cur, nav_msgs::OccupancyGrid& map_t, vector<sl_corr_t>& cores,
     sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]);
-double compute_sum_error_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores);
-void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
-double compute_sum_error_ICP_plus(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
-void inverse_cov_ICP(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix, int num_cores);
+double compute_sum_error_ICP(nav_msgs::OccupancyGrid& map_t, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, nav_msgs::OccupancyGrid& map_t);
 
-bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j);
+double compute_sum_error_ICP_plus(nav_msgs::OccupancyGrid& map_t, sl_point_cloud_t& pcl_cur, sl_vector_t& trans);
+void inverse_cov_ICP(nav_msgs::OccupancyGrid& map_t, sl_point_cloud_t& pcl_cur, sl_vector_t& trans, sl_matrix_t& inv_cov_matrix, int num_cores);
+
+void corr_scan_to_scan(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+double sum_error(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, vector<sl_corr_t>& cores);
+void covariance_mean(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur, vector<sl_corr_t>& cores,
+    sl_vector_t& mean_ref, sl_vector_t& mean_cur, double (&H)[2][2]);
+bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
 double mahalanobis_distance(sl_node_t& node_i, sl_node_t& node_j);
-void compute_loop_constraint(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij);
 void detect_loop_closure(sl_graph_t& graph_t_);
+void thread_func(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
 
-void pose_graph_visualization(sl_graph_t& graph_t_, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker);
-void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<double>& log_map_t);
-void mapping(sl_graph_t& graph_t_, vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t);
-void init_slam(vector<double>& log_map_t, nav_msgs::OccupancyGrid& map_t, visualization_msgs::Marker& node, visualization_msgs::Marker& edge, visualization_msgs::MarkerArray& SetOfMarker, int color);
-void printf_matrix(sl_matrix_t& A);
+Eigen::Vector3d error_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+Eigen::Matrix<double, 3, 6> jacobian_func(Eigen::Vector3d& x_i, Eigen::Vector3d& x_j, Eigen::Vector3d& z_ij);
+double cost_func(vector<sl_edge_t>& edge_t, Eigen::VectorXd& x);
+void optimization(sl_graph_t& graph_t_);
+void cov_func(sl_graph_t& graph_t_);
+
