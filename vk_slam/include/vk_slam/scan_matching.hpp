@@ -48,6 +48,7 @@ void correspondences(sl_point_cloud_t& pcl_cur_w, nav_msgs::OccupancyGrid& map_t
         id_cell = idy*map_t.info.width + idx;
         d_min = my_inf;
         id_cores = -1;
+        new_core = false;
         for(int j = idy - kernel_size; j < idy + kernel_size; j++) {
             if(j >= 0 && j < map_t.info.height) {
                 for(int k = idx - kernel_size; k < idx + kernel_size; k++) {
@@ -58,14 +59,13 @@ void correspondences(sl_point_cloud_t& pcl_cur_w, nav_msgs::OccupancyGrid& map_t
                             if(norm2(cell, pcl_cur_w.pcl[i]) < d_min) {
                                 d_min = norm2(cell, pcl_cur_w.pcl[i]);
                                 id_cores = j*map_t.info.width + k;
+                                new_core = true;
                             }
                         }
                     }
                 }
             }
         }
-
-        new_core = true;
         for(int k = 0; k < cores.size(); k++) {
             if(cores[k].j == id_cores) {
                 new_core = false;
@@ -76,7 +76,7 @@ void correspondences(sl_point_cloud_t& pcl_cur_w, nav_msgs::OccupancyGrid& map_t
                 break;
             }
         }
-        if(new_core && d_min < dist_threshold) {
+        if(new_core) {
             w.i = i;
             w.j = id_cores;
             w.dist2 = d_min;
@@ -169,12 +169,14 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, nav_m
     double H[2][2];
     int count, num_cores;
     double sum_e_k, sum_e_k_1, eps;
-    count = 0; eps = my_inf;
+    count = 0;
+    eps = my_inf;
 
     transform_pcl(pcl_cur, pcl_cur_w, trans);
     correspondences(pcl_cur_w, map_t, cores);
+    num_cores = cores.size();
     sum_e_k_1 = compute_sum_error_ICP(map_t, pcl_cur_w, cores);
-    while(eps > 1e-4 && count < max_inter) {
+    while(eps > 1e-5 && count < max_inter) {
         compute_cov_mean_ICP(pcl_cur, map_t, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {
             for(int j = 0; j < 2; j++) {
@@ -191,19 +193,17 @@ void vanilla_ICP(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij, nav_m
         trans.v[1] = mean_ref.v[1] - (mean_cur.v[0]*sin(trans.v[2]) + mean_cur.v[1]*cos(trans.v[2]));
         transform_pcl(pcl_cur, pcl_cur_w, trans);
         correspondences(pcl_cur_w, map_t, cores);
-        num_cores = cores.size();
         sum_e_k = compute_sum_error_ICP(map_t, pcl_cur_w, cores);
 
         eps = fabs(sum_e_k - sum_e_k_1);
         sum_e_k_1 = sum_e_k;
         count += 1;
     }
-    // cout << "num:" << num_cores << " " << pcl_cur.pcl.size() << " " << count << endl;
+    num_cores = cores.size();
     if(count == max_inter) {
         ROS_WARN("Scan matching failed!");
-    }else {
-        node_j.pose = trans;
     }
+    node_j.pose = trans;
     edge_ij.i = node_i.idx;
     edge_ij.j = node_j.idx;
     edge_ij.z.v[0] = cos(node_i.pose.v[2])*(node_j.pose.v[0] - node_i.pose.v[0]) + sin(node_i.pose.v[2])*(node_j.pose.v[1] - node_i.pose.v[1]);

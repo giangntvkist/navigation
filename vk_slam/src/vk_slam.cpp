@@ -39,12 +39,12 @@ int main(int argc, char **argv) {
     if(!ros::param::get("~min_trans", min_trans)) min_trans = 0.3;
     if(!ros::param::get("~min_rot", min_rot)) min_rot = 0.3;
 
-    if(!ros::param::get("~map_width", map_width)) map_width = 1000;
-    if(!ros::param::get("~map_height", map_height)) map_height = 1000;
-    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.05;
+    if(!ros::param::get("~map_width", map_width)) map_width = 500;
+    if(!ros::param::get("~map_height", map_height)) map_height = 500;
+    if(!ros::param::get("~map_resolution", map_resolution)) map_resolution = 0.01;
 
-    if(!ros::param::get("~kernel_size", kernel_size)) kernel_size = 10;
-    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 0.5;
+    if(!ros::param::get("~kernel_size", kernel_size)) kernel_size = 25;
+    if(!ros::param::get("~dist_threshold", dist_threshold)) dist_threshold = 0.25;
 
     if(!ros::param::get("~map_update_interval", map_update_interval)) map_update_interval = 10;
 

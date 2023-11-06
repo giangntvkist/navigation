@@ -71,7 +71,7 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
     map_width = map_t.info.width;
     map_height = map_t.info.height;
 
-    const int kernel = 50;
+    const int kernel = 40;
     int del_x, del_y, e;
     int id_x1, id_x2, id_y1, id_y2, id_x, id_y;
     int x_step, y_step, p1, p2;
@@ -81,93 +81,94 @@ void ray_tracing(sl_node_t& node_i, nav_msgs::OccupancyGrid& map_t, vector<doubl
         anpha = node_i.scan.ranges[k].v[1] + node_i.pose.v[2] + laser_pose_theta;
         id_x2 = (x + node_i.scan.ranges[k].v[0]*cos(anpha) - x_offset)/map_resolution + 1;
         id_y2 = (y + node_i.scan.ranges[k].v[0]*sin(anpha) - y_offset)/map_resolution + 1;
-
-        del_x = id_x2 - id_x1;
-	    del_y = id_y2 - id_y1;
-	    if (del_x < 0) del_x = -del_x;
-	    if (del_y < 0) del_y = -del_y;
-	    x_step = 1;
-	    if (id_x2 < id_x1) x_step = -1;
-	    y_step = 1;
-	    if (id_y2 < id_y1) y_step = -1;
-	    id_x = id_x1; id_y = id_y1;
-        if (del_x > del_y) {
-		    e = 2*del_y - del_x;
-		    p1 = 2*(del_y - del_x);
-		    p2 = 2*del_y;
-		    for(int i = 0; i < del_x; i++) {
-			    if(e >= 0) {
-				    id_y += y_step;
-				    e += p1;
-			    } else {
-				    e += p2;
-                }
-			    id_x += x_step;
-			    idx_cell = (id_y - 1)*map_width + id_x - 1;
-                x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
-                y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
-                d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
-                phi = atan2(y_cell - y, x_cell - x) - theta;
-                int k_min = k;
-                for(int j = k - kernel; j < k + kernel; j++) {
-                    if(j >= 0 && j < num_beam) {
-                        if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
-                            k_min = j;
+        if(map_valid(id_x2, id_y2, map_t)) {
+            del_x = id_x2 - id_x1;
+            del_y = id_y2 - id_y1;
+            if (del_x < 0) del_x = -del_x;
+            if (del_y < 0) del_y = -del_y;
+            x_step = 1;
+            if (id_x2 < id_x1) x_step = -1;
+            y_step = 1;
+            if (id_y2 < id_y1) y_step = -1;
+            id_x = id_x1; id_y = id_y1;
+            if (del_x > del_y) {
+                e = 2*del_y - del_x;
+                p1 = 2*(del_y - del_x);
+                p2 = 2*del_y;
+                for(int i = 0; i < del_x; i++) {
+                    if(e >= 0) {
+                        id_y += y_step;
+                        e += p1;
+                    } else {
+                        e += p2;
+                    }
+                    id_x += x_step;
+                    idx_cell = (id_y - 1)*map_width + id_x - 1;
+                    x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
+                    y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
+                    d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
+                    phi = atan2(y_cell - y, x_cell - x) - theta;
+                    int k_min = k;
+                    for(int j = k - kernel; j < k + kernel; j++) {
+                        if(j >= 0 && j < num_beam) {
+                            if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
+                                k_min = j;
+                            }
                         }
                     }
-                }
-                if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
-                    l_inv = l_0;
-                } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
-                    l_inv = l_occ;
-                } else if (d <= node_i.scan.ranges[k_min].v[0]) {
-                    l_inv = l_free;
-                }
-                if(idx_cell < map_t.data.size()) {
-                    log_map_t[idx_cell] += l_inv - l_0;
-                }else {
-                    ROS_WARN("Overload map size!");
-                }
-		    }
-	    } else {
-		    e = 2*del_x - del_y;
-		    p1 = 2*(del_x - del_y);
-		    p2 = 2*del_x;
-		    for(int i = 0; i < del_y; i++) {
-			    if (e >= 0) {
-				    id_x += x_step;
-				    e += p1;
-			    } else {
-				    e += p2;
-                }
-			    id_y += y_step;
-			    idx_cell = (id_y - 1)*map_width + id_x - 1;
-                x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
-                y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
-                d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
-                phi = atan2(y_cell - y, x_cell - x) - theta;
-                int k_min = k;
-                for(int j = k - kernel; j < k + kernel; j++) {
-                    if(j >= 0 && j < num_beam) {
-                        if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
-                            k_min = j;
-                        }
+                    if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
+                        l_inv = l_0;
+                    } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
+                        l_inv = l_occ;
+                    } else if (d <= node_i.scan.ranges[k_min].v[0]) {
+                        l_inv = l_free;
+                    }
+                    if(idx_cell < map_t.data.size()) {
+                        log_map_t[idx_cell] += l_inv - l_0;
+                    }else {
+                        ROS_WARN("Overload map size!");
                     }
                 }
-                if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
-                    l_inv = l_0;
-                } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
-                    l_inv = l_occ;
-                } else if (d <= node_i.scan.ranges[k_min].v[0]) {
-                    l_inv = l_free;
+            } else {
+                e = 2*del_x - del_y;
+                p1 = 2*(del_x - del_y);
+                p2 = 2*del_x;
+                for(int i = 0; i < del_y; i++) {
+                    if (e >= 0) {
+                        id_x += x_step;
+                        e += p1;
+                    } else {
+                        e += p2;
+                    }
+                    id_y += y_step;
+                    idx_cell = (id_y - 1)*map_width + id_x - 1;
+                    x_cell = id_x*map_resolution - map_resolution/2 + x_offset;
+                    y_cell = id_y*map_resolution - map_resolution/2 + y_offset;
+                    d = sqrt(pow(x_cell - x, 2) + pow(y_cell - y, 2));
+                    phi = atan2(y_cell - y, x_cell - x) - theta;
+                    int k_min = k;
+                    for(int j = k - kernel; j < k + kernel; j++) {
+                        if(j >= 0 && j < num_beam) {
+                            if(fabs(phi - node_i.scan.ranges[j].v[1]) < fabs(phi - node_i.scan.ranges[k_min].v[1])) {
+                                k_min = j;
+                            }
+                        }
+                    }
+                    if (d > min(range_max, node_i.scan.ranges[k_min].v[0] + map_resolution/2) || fabs(phi - node_i.scan.ranges[k_min].v[1]) > 0.5*angle_increment) {
+                        l_inv = l_0;
+                    } else if (node_i.scan.ranges[k_min].v[0] < range_max && fabs(d - node_i.scan.ranges[k_min].v[0]) < map_resolution/2) {
+                        l_inv = l_occ;
+                    } else if (d <= node_i.scan.ranges[k_min].v[0]) {
+                        l_inv = l_free;
+                    }
+                    if(idx_cell < map_t.data.size()) {
+                        log_map_t[idx_cell] += l_inv - l_0;
+                    }else {
+                        ROS_WARN("Overload map size!");
+                    }
                 }
-                if(idx_cell < map_t.data.size()) {
-                    log_map_t[idx_cell] += l_inv - l_0;
-                }else {
-                    ROS_WARN("Overload map size!");
-                }
-		    }
-	    }
+            }
+        }
     }
 }
 

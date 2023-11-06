@@ -10,11 +10,11 @@ void corr_scan_to_scan(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, v
     sl_vector_t p, q;
     sl_corr_t w;
     bool new_core;
-
     cores.clear();
     for(int i = 0; i < num_point_cur; i++) {
         d_min = my_inf;
         id_cores = -1;
+        new_core = false;
         p = pcl_cur_w.pcl[i];
         for(int j = 0; j < num_point_ref; j++) {
             q = pcl_ref.pcl[j];
@@ -22,9 +22,9 @@ void corr_scan_to_scan(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, v
             if(d < d_min) {
                 d_min = d;
                 id_cores = j;
+                new_core = true;
             }
         }
-        new_core = true;
         for(int k = 0; k < cores.size(); k++) {
             if(cores[k].j == id_cores) {
                 new_core = false;
@@ -35,7 +35,7 @@ void corr_scan_to_scan(sl_point_cloud_t& pcl_ref, sl_point_cloud_t& pcl_cur_w, v
                 break;
             }
         }
-        if(new_core && d_min < dist_threshold) {
+        if(new_core) {
             w.i = i;
             w.j = id_cores;
             w.dist2 = d_min;
@@ -114,8 +114,8 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij
     transform_pcl(pcl_cur, pcl_cur_w, trans);
     corr_scan_to_scan(pcl_ref, pcl_cur_w, cores);
     sum_e_k_1 = sum_error(pcl_ref, pcl_cur_w, cores);
-    while(eps > 2e-4 && count < max_inter) {
-        covariance_mean(pcl_ref, pcl_cur_w, cores, mean_ref, mean_cur, H);
+    while(eps > 1e-5 && count < max_inter) {
+        covariance_mean(pcl_ref, pcl_cur, cores, mean_ref, mean_cur, H);
         for(int i = 0; i < 2; i++) {
             for(int j = 0; j < 2; j++) {
                 H_matrix(i, j) = H[i][j];
@@ -131,14 +131,15 @@ bool check_loop_closure(sl_node_t& node_i, sl_node_t& node_j, sl_edge_t& edge_ij
         trans.v[1] = mean_ref.v[1] - (mean_cur.v[0]*sin(trans.v[2]) + mean_cur.v[1]*cos(trans.v[2]));
         transform_pcl(pcl_cur, pcl_cur_w, trans);
         corr_scan_to_scan(pcl_ref, pcl_cur_w, cores);
-        num_cores = cores.size();
         sum_e_k = sum_error(pcl_ref, pcl_cur_w, cores);
 
         eps = fabs(sum_e_k - sum_e_k_1);
         sum_e_k_1 = sum_e_k;
         count += 1;
     }
-    if((double)num_cores/pcl_cur.pcl.size() > match_rate && count < max_inter && sum_e_k < 5e-4*num_cores) {
+    num_cores = cores.size();
+    cout << (double)num_cores/pcl_cur.pcl.size() << " " << sum_e_k << endl;
+    if((double)num_cores/pcl_cur.pcl.size() > match_rate && sum_e_k < num_cores*1e-4) {
         edge_ij.i = node_i.idx;
         edge_ij.j = node_j.idx;
         edge_ij.z.v[0] = trans.v[0];
