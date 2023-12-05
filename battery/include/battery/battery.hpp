@@ -7,8 +7,8 @@ using namespace mn::CppLinuxSerial;
 using namespace std;
 
 #define DEFAULT_BAURATE BaudRate::B_9600
-#define DEFAULT_WAIT_MS 10 // with baudrate 115200
-#define DEVICE_4 "/dev/RS485_04"
+#define DEFAULT_WAIT_MS 10
+#define DEVICE_4 "/dev/ttyS0"
 
 #define ID_START 0xDD
 #define ID_STATE_READ 0xA5
@@ -19,8 +19,8 @@ using namespace std;
 #define PID_READ_BAT_CELL_VOL 0x04 /* read battery cell voltage */
 #define PID_READ_HW_VER 0x05 /* read the hardware version number of the protection board */
 
-uint16_t Byte2Int(uint8_t byLow, uint8_t byHigh) {
-    return (byLow | (uint16_t)byHigh << 8);
+uint16_t Byte2Int(uint8_t byHigh, uint8_t byLow) {
+    return ((uint16_t)byHigh << 8 | byLow);
 }
 
 /* Wait for n ms */
@@ -48,6 +48,7 @@ class BATTERY {
         string rev_data;
     public:
         void ReadInfo_Battery(vector<uint8_t>& pkg) {
+            pkg.clear();
             pkg.push_back(ID_START);
             pkg.push_back(ID_STATE_READ);
             pkg.push_back(PID_READ_INF_STT);
@@ -60,7 +61,7 @@ class BATTERY {
         void SendPkg(vector<uint8_t>& pkg) {
             string str(pkg.begin(), pkg.end());
             port.Write(str);
-            cout << "Sent package: ";
+            cout << "Host sends: ";
             for(int i = 0; i < pkg.size(); i++) {
                 cout << hex << int(pkg[i]) << " ";
             }
@@ -75,7 +76,7 @@ class BATTERY {
                 port.Read(buffer);
                 rev_data.append(buffer);
             }while(CheckSum(rev_data));
-            cout << "BMS respond: ";
+            cout << "BMS response: ";
             for(int i = 0; i < rev_data.size(); i++) {
                 cout << hex << int(rev_data[i]) << " ";
             }
@@ -90,8 +91,8 @@ class BATTERY {
             nominal_capacity = Byte2Int(data[6], data[7]);
             cout << dec << "Voltage: " << voltage/100.0 << "V" << "\n" \
                         << "Current: " << current/100.0 << "A" << "\n" \
-                        << "Remain capacity: " << remain_capacity/100.0 << "AH" << "\n" \
-                        << "Nominal capacity: " << nominal_capacity/100.0 << "AH" << endl;
+                        << "Remain capacity: " << remain_capacity/100.0 << "Ah" << "\n" \
+                        << "Nominal capacity: " << nominal_capacity/100.0 << "Ah" << endl;
         }
 
         BATTERY(ros::NodeHandle* nh) {
