@@ -8,7 +8,7 @@ using namespace std;
 
 #define DEFAULT_BAURATE BaudRate::B_9600
 #define DEFAULT_WAIT_MS 10
-#define DEVICE_4 "/dev/ttyS0"
+#define DEFAULT_DEVICE "/dev/ttyUSB0"
 
 #define ID_START 0xDD
 #define ID_STATE_READ 0xA5
@@ -19,80 +19,88 @@ using namespace std;
 #define PID_READ_BAT_CELL_VOL 0x04 /* read battery cell voltage */
 #define PID_READ_HW_VER 0x05 /* read the hardware version number of the protection board */
 
+#define NumDataBytes__ 34 /* number of bytes read from PID_READ_INF_STT */
+
 uint16_t Byte2Int(uint8_t byHigh, uint8_t byLow) {
     return ((uint16_t)byHigh << 8 | byLow);
 }
 
-/* Wait for n ms */
-void Waitms(int n) {
-    usleep(n*1000);
-}
-
-int CheckSum(string& data) {
+int CheckSum(std::vector<uint8_t>& data) {
     uint8_t csum = 0;
-    for(uint16_t i = 0; i < data.size(); i++) {
+    uint16_t i;
+    for(i = 0; i < data.size(); i++) {
         csum += data[i];
     }
     if(csum == 0) return 0;
-    else return -1;
+    else return 1;
 }
 
 class BATTERY {
     private:
-        SerialPort port;
+        std::unique_ptr<SerialPort> port; /* serial port */
         uint16_t voltage; /* unit 10mV */
         int16_t current; /* unit 10mA, if negative, It's discharge */
         uint16_t remain_capacity; /* unit is 10mAH */
         uint16_t nominal_capacity;
-        vector<uint8_t> pkg;
-        string rev_data;
+        std::vector<uint8_t> sendData; /* package sent */
+        std::vector<uint8_t> readData; /* package response */
+        int first_byte = 4;
+        bool __success;
+        double publish_frequency;
     public:
-        void ReadInfo_Battery(vector<uint8_t>& pkg) {
-            pkg.clear();
-            pkg.push_back(ID_START);
-            pkg.push_back(ID_STATE_READ);
-            pkg.push_back(PID_READ_INF_STT);
-            pkg.push_back(0x00);
-            pkg.push_back(0xFF);
-            pkg.push_back(0xFD);
-            pkg.push_back(ID_STOP);
-        }
+        void ReadInfoBattery() {
+            sendData.clear();
+            sendData.push_back(ID_START);
+            sendData.push_back(ID_STATE_READ);
+            sendData.push_back(PID_READ_INF_STT);
+            sendData.push_back(0x00);
+            sendData.push_back(0xFF);
+            sendData.push_back(0xFD);
+            sendData.push_back(ID_STOP);
+            port->WriteBinary(sendData);
 
-        void SendPkg(vector<uint8_t>& pkg) {
-            string str(pkg.begin(), pkg.end());
-            port.Write(str);
+            #ifdef DEBUG
             cout << "Host sends: ";
-            for(int i = 0; i < pkg.size(); i++) {
-                cout << hex << int(pkg[i]) << " ";
+            for(int i = 0; i < sendData.size(); i++) {
+                cout << hex << int(sendData[i]) << " ";
             }
             cout << endl;
-        }
+            ROS_INFO("Reading data ...");
+            #endif
+            std::vector<uint8_t> buffer;
+            readData.clear();
+            do{
+                port->ReadBinary(buffer);
+                for(int i = 0; i < buffer.size(); i++) {
+                    readData.push_back(buffer[i]);
+                }
+            }while(CheckSum(buffer));
+            if(readData.size() == NumDataBytes__) {
+                #ifdef DEBUG
+                ROS_INFO("Reading data successful!");
+                cout << "BMS response: ";
+                for(int i = 0; i < readData.size(); i++) {
+                    cout << hex << int(readData[i]) << " ";
+                }
+                #endif
 
-        void RevPkg(string& rev_data) {
-            rev_data.erase();
-            string buffer;
-            do {
-                Waitms(DEFAULT_WAIT_MS);
-                port.Read(buffer);
-                rev_data.append(buffer);
-            }while(CheckSum(rev_data));
-            cout << "BMS response: ";
-            for(int i = 0; i < rev_data.size(); i++) {
-                cout << hex << int(rev_data[i]) << " ";
+                voltage = Byte2Int(readData[first_byte], readData[first_byte+1]);
+                current = Byte2Int(readData[first_byte+2], readData[first_byte+3]);
+                remain_capacity = Byte2Int(readData[first_byte+4], readData[first_byte+5]);
+                nominal_capacity = Byte2Int(readData[first_byte+6], readData[first_byte+7]);
+                cout << dec << "    Voltage                 : " << voltage/100.0 << "V" << "\n" \
+                            << "    Current                 : " << current/100.0 << "A" << "\n" \
+                            << "    Remain capacity         : " << remain_capacity/100.0 << "AH" << "\n" \
+                            << "    Nominal capacity        : " << nominal_capacity/100.0 << "AH" << "\n" \
+                            << "    Battery capacity/Voltage: " << remain_capacity*10/voltage << "%" << endl;
+                if(current > 0) {
+                    ROS_INFO("Battery is charging!");
+                }else if(remain_capacity*10/voltage < 25) {
+                    ROS_WARN("Low battery!");
+                }
+            }else {
+                ROS_WARN("Received data failed, please try again!");
             }
-            cout << endl;
-        }
-
-        void GetMainData(string& rev_data) {
-            string data = rev_data.substr(4);
-            voltage = Byte2Int(data[0], data[1]);
-            current = Byte2Int(data[2], data[3]);
-            remain_capacity = Byte2Int(data[4], data[5]);
-            nominal_capacity = Byte2Int(data[6], data[7]);
-            cout << dec << "Voltage: " << voltage/100.0 << "V" << "\n" \
-                        << "Current: " << current/100.0 << "A" << "\n" \
-                        << "Remain capacity: " << remain_capacity/100.0 << "Ah" << "\n" \
-                        << "Nominal capacity: " << nominal_capacity/100.0 << "Ah" << endl;
         }
 
         BATTERY(ros::NodeHandle* nh) {
@@ -100,19 +108,21 @@ class BATTERY {
             current = 0;
             remain_capacity = 0;
             nominal_capacity = 0;
-            port.SetDevice(DEVICE_4);
-            port.SetBaudRate(DEFAULT_BAURATE);
-            port.SetTimeout(100);
-            port.Open();
+            port = std::make_unique<SerialPort>(DEFAULT_DEVICE, DEFAULT_BAURATE, NumDataBits::EIGHT, Parity::NONE, NumStopBits::ONE);
+            port->SetTimeout(100);
+            port->Open();
+            if(!ros::param::get("~publish_frequency", publish_frequency))
+                publish_frequency = 1;
 
-            ReadInfo_Battery(pkg);
-            SendPkg(pkg);
-            RevPkg(rev_data);
-            GetMainData(rev_data);
+            ros::Rate rate(publish_frequency);
+            while(ros::ok()) {
+                ReadInfoBattery();
+                rate.sleep();
+            }
         }
         
         ~BATTERY() {
-            port.Close();
+            port->Close();
         }
 };
 
