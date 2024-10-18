@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+	<node name= "rviz" pkg= "rviz" type= "rviz" args="-d $(find depthimage_to_laserscan)/depthimage_to_laserscan.rviz"/>
+	<node name="depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" output="screen">
+	</node>
+</launch>

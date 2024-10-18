@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+	<node name="lookup_table" pkg="lookup_table" type="lookup_table" output="screen">
+		<param name = "~max_occ_dist" type = "double" value = "2.0"/>
+        	<param name = "~lookup_table_path" type = "string" value = "$(find lookup_table)/launch/lookup_table_file.txt"/>
+	</node>
+</launch>

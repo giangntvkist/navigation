@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<launch>
+	<node name= "rviz" pkg= "rviz" type= "rviz" args="-d $(find human_tracking)/human_tracking.rviz"/>
+	<node name="human_tracking" pkg="human_tracking" type="human_tracking" output="screen"/>
+</launch>
